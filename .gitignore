@@ -1,0 +1,59 @@
+# Secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Private chat data (Telegram messages, derived training data)
+result.json
+train.jsonl
+train.jsonl.bak
+val.jsonl
+val.jsonl.bak
+val_examples.json
+
+# Eval artifacts containing private chat fragments
+eval/generations_*.json
+eval/golden_prompts.json
+eval/ratings_*.json
+eval/preference_pairs*.jsonl
+eval/sft_augment.jsonl
+eval/distilled_*.jsonl
+eval/distilled_*.failures
+eval/*.bak
+eval/dataset-metadata.json
+
+# Local model checkpoints (multi-GB; pushed to HF instead)
+businessgpt_*_model/
+merged_model_*/
+outputs/
+*.safetensors
+*.gguf
+*.bin
+adapter_*.json
+adapter_*.safetensors
+
+# Third-party sources (cloned, not vendored)
+llama.cpp/
+
+# Caches + OS
+__pycache__/
+*.pyc
+.DS_Store
+.ipynb_checkpoints/
+
+# IDE
+.vscode/
+.idea/
+.cursor/
+.claude/
+*.code-workspace
+
+# Portfolio (separate workspace if exists)
+portfolio/
+
+# Kaggle config (contains API token)
+.kaggle/
+
+# Notebook checkpoints
+*.ipynb_checkpoints/

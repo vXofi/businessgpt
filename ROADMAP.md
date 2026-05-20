@@ -4,6 +4,45 @@ Forward-looking plan. Retrospective notes live in `PLAN.md`.
 
 ---
 
+## 🚀 Resume from here (after PC migration)
+
+```bash
+# 1. Clone + deps
+git clone https://github.com/vXofi/businessgpt
+cd businessgpt
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+
+# 2. Env vars (copy from .env.template, fill in)
+cp .env.template .env
+# Edit .env: set OPENROUTER_API_KEY (https://openrouter.ai/keys)
+#                  HF_TOKEN (https://huggingface.co/settings/tokens, write scope)
+
+# 3. Private data from Kaggle
+#    Requires ~/.kaggle/kaggle.json (mode 600). Get from https://www.kaggle.com/settings/account
+kaggle datasets download alextech123/businessraw -p . --unzip       # raw chat → result.json
+kaggle datasets download avxofi/businessgpt-eval -p eval/ --unzip   # eval artifacts → eval/
+
+# 4. Resume v16 work — Phase 1 first
+source .env && export $(grep -v '^#' .env | xargs)   # load env vars
+python3 eval/distill_responses.py                     # ~$1.30 OpenRouter spend, ~5 min
+python3 eval/distill_responses.py --review > /tmp/review.md   # manual eyeball 30 samples
+```
+
+**Phase gates** (each must pass before moving on — details in v16 section below):
+
+| Phase | Gate | Action |
+|---|---|---|
+| 1 distill | ≥25/30 review accepted | upload to Kaggle: `kaggle datasets version -p eval -m 'v16 distill'` |
+| 2 SFT | eval_loss ∈ [2.8, 3.1] | run `training.ipynb` on Kaggle (LORA_REPO=v16) |
+| 3 ORPO | rewards/chosen ↑, rejected ↓, no NaN | run `orpo.ipynb` on Kaggle |
+| 4 RM | held-out acc ≥ 0.75 | run `reward_model.ipynb` on Kaggle |
+| 5 best-of-N | ≥60% wins over 50 prompts | `python3 eval/rank_with_rm.py --version v16` then `pairwise_ui_bestof` in bench |
+
+If any gate fails — see the Phase section below for the escalation path.
+
+---
+
 ## Where we are (May 2026)
 
 **v15** — Qwen3.5-9B-abliterated SFT pushed to `vXofi/businessgpt-v15-qwen3.5-9b`. Recovered from checkpoint-855 (1.5 / 2 epochs, eval_loss=3.10) after 12 h Kaggle timeout. Eval pending — run `eval_only.ipynb` for v15 generations + bench pairwise vs v14.

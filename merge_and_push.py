@@ -43,6 +43,8 @@ SFT_REPO = os.environ.get("SFT_REPO") or None  # set to v16 SFT repo when conver
 # production VM should serve a quantized GGUF, so keep this off by default.
 UPLOAD_F16 = os.environ.get("UPLOAD_F16", "0").lower() in {"1", "true", "yes"}
 PUSH_TO_HF = os.environ.get("PUSH_TO_HF", "1").lower() in {"1", "true", "yes"}
+SKIP_EXISTING_HF = os.environ.get("SKIP_EXISTING_HF", "1").lower() in {"1", "true", "yes"}
+REUSE_LOCAL_GGUF = os.environ.get("REUSE_LOCAL_GGUF", "1").lower() in {"1", "true", "yes"}
 
 # imatrix calibration
 USE_IMATRIX = os.environ.get("USE_IMATRIX", "0").lower() in {"1", "true", "yes"}
@@ -247,7 +249,10 @@ print("=" * 60)
 os.makedirs(MERGED_DIR, exist_ok=True)
 f16_gguf = os.path.join(MERGED_DIR, "model-f16.gguf")
 
-run(f"{sys.executable} {convert_script} {hf_model_dir} --outtype f16 --outfile {f16_gguf}")
+if REUSE_LOCAL_GGUF and os.path.isfile(f16_gguf) and os.path.getsize(f16_gguf) > 0:
+    print(f"Reusing existing F16 GGUF: {f16_gguf}")
+else:
+    run(f"{sys.executable} {convert_script} {hf_model_dir} --outtype f16 --outfile {f16_gguf}")
 
 size_mb = os.path.getsize(f16_gguf) / 1024 / 1024
 print(f"F16 GGUF: {f16_gguf} ({size_mb:.0f} MB)")
@@ -277,7 +282,10 @@ imatrix_arg = f"--imatrix {imatrix_path} " if imatrix_path else ""
 
 for quant in GGUF_QUANTS:
     out_path = os.path.join(MERGED_DIR, f"model-{quant}.gguf")
-    run(f"{quantize_bin} {imatrix_arg}{f16_gguf} {out_path} {quant}")
+    if REUSE_LOCAL_GGUF and os.path.isfile(out_path) and os.path.getsize(out_path) > 0:
+        print(f"  Reusing existing {quant}: {out_path}")
+    else:
+        run(f"{quantize_bin} {imatrix_arg}{f16_gguf} {out_path} {quant}")
     size_mb = os.path.getsize(out_path) / 1024 / 1024
     print(f"  {quant}: {out_path} ({size_mb:.0f} MB)")
     gguf_files.append(out_path)
@@ -304,9 +312,19 @@ from huggingface_hub import HfApi
 
 api = HfApi()
 api.create_repo(HF_GGUF_REPO, exist_ok=True)
+remote_files = set()
+if SKIP_EXISTING_HF:
+    try:
+        remote_files = set(api.list_repo_files(repo_id=HF_GGUF_REPO, repo_type="model"))
+        print(f"Remote repo has {len(remote_files)} file(s); existing GGUF uploads will be skipped.")
+    except Exception as e:
+        print(f"Could not list remote files, will upload normally: {e}")
 
 for gguf_path in upload_files:
     fname = os.path.basename(gguf_path)
+    if SKIP_EXISTING_HF and fname in remote_files:
+        print(f"  Skipping {fname}: already present on HF")
+        continue
     print(f"  Uploading {fname}...")
     api.upload_file(
         path_or_fileobj=gguf_path,

@@ -25,22 +25,27 @@ import json
 
 # ── Config ──────────────────────────────────────────────────
 # v15+ are 9B; 2B-class versions stayed up to v14.
-SOURCE_REPO = "vXofi/businessgpt-v16-qwen3.5-9b"
-BASE_MODEL_ID = "huihui-ai/Huihui-Qwen3.5-9B-abliterated"  # only needed for LoRA
-HF_GGUF_REPO = "vXofi/businessgpt-v16-qwen3.5-9b-gguf"
-MERGED_DIR = "merged_model_v16_9b"
-LLAMA_CPP_DIR = "llama.cpp"
+SOURCE_REPO = os.environ.get("SOURCE_REPO", "vXofi/businessgpt-v16-qwen3.5-9b")
+BASE_MODEL_ID = os.environ.get("BASE_MODEL_ID", "huihui-ai/Huihui-Qwen3.5-9B-abliterated")  # only needed for LoRA
+HF_GGUF_REPO = os.environ.get("HF_GGUF_REPO", "vXofi/businessgpt-v16-qwen3.5-9b-gguf")
+MERGED_DIR = os.environ.get("MERGED_DIR", "merged_model_v16_9b")
+LLAMA_CPP_DIR = os.environ.get("LLAMA_CPP_DIR", "llama.cpp")
 # 9B GGUF sizes: Q8_0=~9.5 GB, Q5_K_M=~6.4 GB, Q4_K_M=~5.4 GB.
 # Q5_K_M is the recommended prod quant for 9B on 12 GB CPU RAM (loss <2% vs fp16).
-GGUF_QUANTS = ["Q5_K_M", "Q4_K_M"]
+GGUF_QUANTS = [q.strip() for q in os.environ.get("GGUF_QUANTS", "Q5_K_M,Q4_K_M").split(",") if q.strip()]
 
 # When SOURCE_REPO is a preference adapter, set SFT_REPO to the SFT base it sits on.
 # The script will apply+merge SFT first, then apply+merge the preference LoRA on top.
 # Set to None for plain SFT-only repos (single LoRA over base).
-SFT_REPO = None  # for v16 SFT-only run; set to "vXofi/businessgpt-v16-qwen3.5-9b" when pushing v16-orpo
+SFT_REPO = os.environ.get("SFT_REPO") or None  # set to v16 SFT repo when converting a preference adapter
+
+# F16 is an intermediate. Uploading it costs a lot of time/storage and the
+# production VM should serve a quantized GGUF, so keep this off by default.
+UPLOAD_F16 = os.environ.get("UPLOAD_F16", "0").lower() in {"1", "true", "yes"}
+PUSH_TO_HF = os.environ.get("PUSH_TO_HF", "1").lower() in {"1", "true", "yes"}
 
 # imatrix calibration
-USE_IMATRIX = False
+USE_IMATRIX = os.environ.get("USE_IMATRIX", "0").lower() in {"1", "true", "yes"}
 # Try in order — val_examples.json (Kaggle output, v12 prompt) preferred over old jsonl.
 # .json files must be a list of {"messages": [...]} objects.
 # .jsonl files must have one such object per line.
@@ -280,6 +285,18 @@ for quant in GGUF_QUANTS:
 
 # ── Step 6: Push GGUF files to HF ───────────────────────────
 print("\n" + "=" * 60)
+if UPLOAD_F16:
+    upload_files = gguf_files
+else:
+    upload_files = [p for p in gguf_files if p != f16_gguf]
+
+if not PUSH_TO_HF:
+    print("\n" + "=" * 60)
+    print("Step 6: PUSH_TO_HF=0, skipping HuggingFace upload.")
+    print("=" * 60)
+    print(f"Files: {', '.join(os.path.basename(f) for f in gguf_files)}")
+    raise SystemExit(0)
+
 print("Step 6: Pushing GGUF files to HuggingFace Hub...")
 print("=" * 60)
 
@@ -288,7 +305,7 @@ from huggingface_hub import HfApi
 api = HfApi()
 api.create_repo(HF_GGUF_REPO, exist_ok=True)
 
-for gguf_path in gguf_files:
+for gguf_path in upload_files:
     fname = os.path.basename(gguf_path)
     print(f"  Uploading {fname}...")
     api.upload_file(
@@ -299,4 +316,4 @@ for gguf_path in gguf_files:
     )
 
 print(f"\nDone! GGUF models pushed to https://huggingface.co/{HF_GGUF_REPO}")
-print(f"Files: {', '.join(os.path.basename(f) for f in gguf_files)}")
+print(f"Files: {', '.join(os.path.basename(f) for f in upload_files)}")

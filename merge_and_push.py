@@ -25,19 +25,19 @@ import json
 
 # ── Config ──────────────────────────────────────────────────
 # v15+ are 9B; 2B-class versions stayed up to v14.
-SOURCE_REPO = "vXofi/businessgpt-v15-qwen3.5-9b"
+SOURCE_REPO = "vXofi/businessgpt-v16-qwen3.5-9b"
 BASE_MODEL_ID = "huihui-ai/Huihui-Qwen3.5-9B-abliterated"  # only needed for LoRA
-HF_GGUF_REPO = "vXofi/businessgpt-v15-qwen3.5-9b-gguf"
-MERGED_DIR = "merged_model_v15_9b"
+HF_GGUF_REPO = "vXofi/businessgpt-v16-qwen3.5-9b-gguf"
+MERGED_DIR = "merged_model_v16_9b"
 LLAMA_CPP_DIR = "llama.cpp"
 # 9B GGUF sizes: Q8_0=~9.5 GB, Q5_K_M=~6.4 GB, Q4_K_M=~5.4 GB.
 # Q5_K_M is the recommended prod quant for 9B on 12 GB CPU RAM (loss <2% vs fp16).
 GGUF_QUANTS = ["Q5_K_M", "Q4_K_M"]
 
-# When SOURCE_REPO is a DPO adapter, set SFT_REPO to the SFT base it sits on.
-# The script will apply+merge SFT first, then apply+merge the DPO LoRA on top.
+# When SOURCE_REPO is a preference adapter, set SFT_REPO to the SFT base it sits on.
+# The script will apply+merge SFT first, then apply+merge the preference LoRA on top.
 # Set to None for plain SFT-only repos (single LoRA over base).
-SFT_REPO = None  # for v15 SFT-only run; set to "vXofi/businessgpt-v15-qwen3.5-9b" when pushing v15-dpo
+SFT_REPO = None  # for v16 SFT-only run; set to "vXofi/businessgpt-v16-qwen3.5-9b" when pushing v16-orpo
 
 # imatrix calibration
 USE_IMATRIX = False
@@ -177,7 +177,7 @@ print(f"Downloaded to: {source_path}")
 if is_lora_repo(source_path):
     print("\n" + "=" * 60)
     if SFT_REPO is not None:
-        print(f"Step 2: DPO stack — merging SFT ({SFT_REPO}) then DPO ({SOURCE_REPO})...")
+        print(f"Step 2: Preference stack — merging SFT ({SFT_REPO}) then adapter ({SOURCE_REPO})...")
     else:
         print("Step 2: LoRA adapter detected — merging with base model...")
     print("=" * 60)
@@ -194,7 +194,7 @@ if is_lora_repo(source_path):
     )
     print(f"Base model loaded: {sum(p.numel() for p in model.parameters()):,} params")
 
-    # If this is a DPO repo, apply SFT first and bake it in before stacking DPO.
+    # If this is a preference-tuned repo, apply SFT first before stacking the adapter.
     if SFT_REPO is not None:
         sft_path = snapshot_download(SFT_REPO)
         sft = PeftModel.from_pretrained(model, sft_path)
@@ -202,7 +202,7 @@ if is_lora_repo(source_path):
         del sft
         print(f"SFT merged from {SFT_REPO}")
 
-    # Apply the SOURCE_REPO LoRA (DPO if SFT_REPO is set, else SFT alone).
+    # Apply the SOURCE_REPO LoRA (preference adapter if SFT_REPO is set, else SFT alone).
     model = PeftModel.from_pretrained(model, source_path)
     model = model.merge_and_unload()
     print(f"Final merged: {sum(p.numel() for p in model.parameters()):,} params")

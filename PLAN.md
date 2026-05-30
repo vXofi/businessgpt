@@ -350,7 +350,7 @@ Strips Qwen3 `<think>` blocks and any leaked speaker tokens from generation star
 
 ### Architecture
 
-- **Generation lives on Kaggle**: at end of `training.ipynb`, model is already in memory → run `chat()` on the full golden pool → save `eval/generations_v<N>.json`. Pure batch, no UI, **background-mode safe** (Kaggle "Save & Run All"). Output also pushed to the model HF repo so the bench notebook can pull it without a Kaggle download.
+- **Generation lives on Kaggle**: at end of `training.ipynb`, model is already in memory → run `chat()` on the full golden pool → save `eval/generations_v<N>.json`. Pure batch, no UI, **background-mode safe** (Kaggle "Save & Run All"). Historical note: this used to push generations to HF for convenience; that is now disabled because generations contain private chat context.
 - **Labeling lives locally**: `businessgpt_bench.ipynb` opens in Jupyter on Mac (or Colab), loads two `generations_v<N>.json` files, shows ipywidgets blind A/B UI, writes decisions to `eval/ratings_<A>_vs_<B>.json` incrementally (crash/restart safe). Already-rated prompts are skipped on re-open.
 
 ### Files
@@ -375,7 +375,7 @@ eval/
 
 | Function | Output |
 |---|---|
-| `load_golden()` / `load_generations(version)` | Pool / version outputs (disk first, HF fallback with caching) |
+| `load_golden()` / `load_generations(version)` | Pool / version outputs from local disk; HF fallback disabled for private generations |
 | `run_eval(version)` | Local generation against currently-loaded backend (rare; usually Kaggle does this) |
 | `guardrails_table(*versions)` | Table: `gay_spam_pct`, `chinese_pct`, `refusal_pct`, length stats, vocab entropy. Comparison columns side-by-side. |
 | `pairwise_ui(a, b, session_size=30, category=None)` | ipywidgets UI: blind A/B side-by-side panels, **6 buttons** (1/2/★super1/★super2/tie/skip), progress counter, sampled from unrated subset, optional category filter. Super-tier marks exceptional responses for higher-weight DPO pairs. |
@@ -385,7 +385,7 @@ eval/
 
 1. Train v<N> on Kaggle (background OK).
 2. Eval cell at end of `training.ipynb` writes `eval/generations_v<N>.json`, pushes to HF.
-3. Locally: `load_generations("v<N>")` (auto-downloads from HF if not on disk).
+3. Locally: place Kaggle output under `eval/`, then `load_generations("v<N>")`.
 4. Run `guardrails_table("v<N-1>", "v<N>")` — verify no regression on auto checks.
 5. Run `pairwise_ui("v<N-1>", "v<N>", session_size=30)` — label a session. Repeat across multiple sessions to expand coverage.
 6. Run `summarize_ratings("v<N-1>", "v<N>")` — see win-rate + CI. If CI excludes 50% with v_new winning → ship.
@@ -423,7 +423,7 @@ End-to-end for one iteration cycle. Models live on HF; data lives Kaggle/local.
 4. **Wait** ~8-10h on T4×2.
 5. **Outputs (automatic)**:
    - SFT adapter pushed to `vXofi/businessgpt-v<N>-qwen3.5-2b`
-   - `eval/generations_v<N>.json` (single, default-temp) AND `eval/generations_v<N>_multi.json` (4 candidates, for plan C DPO data) written to `/kaggle/working/eval/` AND pushed to the same HF repo
+   - `eval/generations_v<N>.json` (single, default-temp) AND `eval/generations_v<N>_multi.json` (4 candidates, for plan C DPO data) written to `/kaggle/working/eval/`. HF upload is now disabled for private eval data.
 
 ### B. Eval (`businessgpt_bench.ipynb`, locally on Mac)
 
@@ -466,7 +466,7 @@ Run when total preference pairs across all `ratings_*.json` exceeds ~500.
 5. **Wait** ~3-5h on T4×2 (faster than SFT — fewer steps with smaller dataset, smaller LoRA r=16).
 6. **Outputs**:
    - DPO adapter pushed to `vXofi/businessgpt-v<N>-dpo-qwen3.5-2b`
-   - `eval/generations_v<N>-dpo.json` pushed to same HF repo
+   - `eval/generations_v<N>-dpo.json` written locally/Kaggle output only by default
 
 ### D. Eval the DPO model
 
@@ -626,7 +626,7 @@ businessgpt_retrain/
 - Cells 12-14: Parameter Grid Comparison (10 configs × 3 scenarios × 3 gens) + stats
 - Cell 16: Interactive chat (`/clear`, `/context`, `/exit`)
 - Cell 18 (header): **## Evaluation Framework**
-- Cell 19: `load_golden()`, `load_generations(version)` — disk first, HF fallback with caching (NEW)
+- Cell 19: `load_golden()`, `load_generations(version)` — local disk only for private generations
 - Cell 20: `run_eval(version)` — local variant of the Kaggle eval cell (NEW)
 - Cell 21: `guardrails(version)`, `guardrails_table(*versions)` — gay/CJK/refusal/length/entropy regex checks (NEW)
 - Cell 22: `pairwise_ui(a, b, session_size=30, category=None)` — ipywidgets blind A/B with crash-safe writes (NEW)

@@ -59,32 +59,35 @@ Approved 2026-05-15. Goal: real quality jump, not regex band-aids. 14B base defe
 
 Serial execution: each phase gates the next.
 
-### Phase 1: Distillation from Qwen3.5-397B-a17b via OpenRouter
+### Phase 1: Distillation from DeepSeek V4 Pro via OpenRouter
 
 - **Script**: `eval/distill_responses.py` (already written, syntax-validated)
 - **Input**: 1000 contexts sampled from `train.jsonl` (filtered by `_is_quality_response`)
-- **System prompt**: stricter persona than training-time SYSTEM_PROMPT — enforces 1-5 lines, no refusals, ≥1 profanity marker
+- **System prompt**: `prompts/distill_nextmsg_v4_gpt.txt` — next-message chat participant prompt with `Правила распиздовки`
 - **Output record schema**: matches `sft_augment.jsonl` (training will load via existing path glob)
 - **Post-filter**: length, CJK, gay-spam, refusal markers, profanity gate (regex `\b(бля|блять|нах|нахуй|хуй|пизд|ёпт|епт|сука|ебан|еба)\b`)
-- **Cost**: ~$1.30 for 1000 distillations on Qwen3.5-397b-a17b. Default model `qwen/qwen3.5-397b-a17b`; escalate to `qwen/qwen3.6-max-preview` (~$3.40) if style holds < 60%
-- **Run**: `OPENROUTER_API_KEY=... python3 eval/distill_responses.py`
+- **Cost**: DeepSeek V4 Pro debug run with `reasoning low`, `max_tokens=1000`, `exclude_reasoning` was ~$2.72 / 1000, 0 empty, 8/8 stop. Paired low/high review picked high 8/12, so use high primary with low fallback.
+- **Run**: `OPENROUTER_API_KEY=... python3 eval/distill_responses.py --model deepseek/deepseek-v4-pro --prompt-file prompts/distill_nextmsg_v4_gpt.txt --output eval/distilled_deepseek_v4pro_v16.jsonl --max-tokens 2400 --reasoning-effort high --exclude-reasoning --fallback-model deepseek/deepseek-v4-pro --fallback-reasoning-effort low --fallback-max-tokens 1000 --fallback-on failed,empty,refusal,too_long,too_short`
 - **Review**: `python3 eval/distill_responses.py --review > /tmp/review.md`, manual eyeball
 - **Gate**: ≥25/30 samples accepted, ≥700 records survive filter
 
 ### Phase 2: v16 SFT
 
-- `training.ipynb` cells already updated for v16: title, augment loader (sft_augment + distilled both load), SAVE_DIR, HF_REPO, streaming checkpoint repo
-- Hyperparams unchanged from v15: 9B fp16, MAX_SEQ_LENGTH=1024, NUM_EPOCHS=1, batch=1, grad_accum=16, lr=5e-5, adamw_8bit, NEFTune=5, LoRA r=32 all-linear, DISTILL_REPEAT=1
+- `training.ipynb` cells already updated for v16: title, augment loader, SAVE_DIR, HF_REPO, streaming checkpoint repo
+- Old `sft_augment.jsonl` is disabled by default (`USE_OLD_SFT_AUGMENT=False`) because it is stale v11-v13 model-output data and has carried artifacts. Use only as an ablation switch.
+- Hyperparams: 9B fp16, MAX_SEQ_LENGTH=768 after late CE-loss OOM at 1024, NUM_EPOCHS=1, batch=1, grad_accum=16, lr=5e-5, adamw_8bit, NEFTune=5, LoRA r=32 all-linear, DISTILL_REPEAT=1
+- Training filters rows containing known overfit poison token family `зел[её]н\w*`.
 - Upload distilled jsonl to Kaggle businessgpt-eval dataset before running
 - Run on Kaggle T4×2; ~10-11 h
 - Target: HF `vXofi/businessgpt-v16-qwen3.5-9b`
-- Then `eval_only.ipynb` (LORA_REPO=v16) → `generations_v16{,_multi}.json`
+- Then `eval_only.ipynb` (LORA_REPO=v16) → `generations_v16{,_multi}.json` in Kaggle output/local `eval/`. Do not push generations to HF; they contain private chat context.
 - Gate: `eval_loss ∈ [2.8, 3.1]`, smoke test produces profanity-bearing Russian
 
 ### Phase 3: ORPO (replaces DPO)
 
 - `orpo.ipynb` ready (clone of dpo.ipynb with ORPOTrainer)
-- Uses `eval/preference_pairs_v14_multi.jsonl` (1450 pairs, in-distribution from v14 multi-candidate labeling)
+- Uses fresh `eval/preference_pairs_v16_multi.jsonl` built from v16 multi-candidate labeling
+- Flow: `eval_only.ipynb` → `generations_v16_multi.json`; label with `pairwise_ui_multi("v16")`; build with `python3 eval/build_multi_preference_pairs.py --version v16`; upload to `businessgpt-eval`
 - ORPO config: `beta=0.1`, `lr=1e-5`, `num_epochs=2`, no precompute_ref (= no Qwen3.5 hybrid fp16 NaN trigger)
 - Pre-flight: `inspect.signature(ORPOConfig.__init__)` to verify param names (trl version drift)
 - Stability callback ported from DPO (abort on NaN/runaway margin)
@@ -95,7 +98,7 @@ Serial execution: each phase gates the next.
 
 - `reward_model.ipynb` ready
 - Base: `DeepPavlov/rubert-base-cased` (180MB; fits production CPU RAM headroom alongside 9B Q5_K_M GGUF)
-- Train on `preference_pairs_v14_multi.jsonl`: 1400 train+val, 50 held-out
+- Train on `preference_pairs_v16_multi.jsonl` from fresh v16 labels
 - 4 epochs, lr=2e-5, batch=8, max_len=512, truncation_side=left
 - Target: HF `vXofi/businessgpt-reward-rubert`
 - **Strict gate**: held-out pairwise accuracy ≥ 0.75
@@ -125,7 +128,7 @@ After v16 ships and we know whether the 9B + distill + ORPO + best-of-N stack mo
 
 ## Open questions / unresolved
 
-1. **Preference data staleness** — v14_multi pairs label v14 outputs. After v16, the policy has moved; "rejected" responses may no longer resemble v16 outputs. Right fix: regenerate v16_multi candidates after Phase 2, label 200 new pairs, run ORPO on `preference_pairs_v16_multi.jsonl`. Deferred (blocks Phase 3 on a labeling sprint). Acknowledged tradeoff.
+1. **Preference data staleness** — v14_multi pairs label v14 outputs. Mitigation: Phase 3 now requires fresh `v16_multi` labeling before ORPO/RM.
 
 2. **Single-example memorization on 9B** — "Зелёный диплом", "ни одной юбки" surface in v15 outputs from low-count training instances. The fundamental driver is 9B capacity vs ~10k example set. Regex blocklist (`_BOT_LEAK_PATTERNS` in `training.ipynb`) catches known patterns post-hoc. Structural levers if it stays a problem:
    - Drop `AUGMENT_REPEAT` 2 → 1 (less amplification of pairwise-chosen)
@@ -143,13 +146,14 @@ After v16 ships and we know whether the 9B + distill + ORPO + best-of-N stack mo
 
 ```
 businessgpt_retrain/
+├── SCRIPT_GUIDE.md         # local script command reference
 ├── ROADMAP.md             # this file — upcoming work
 ├── PLAN.md                # retrospective notes (v1-v13)
 ├── training.ipynb         # SFT (v16-ready)
 ├── orpo.ipynb             # ORPO (v16-orpo)
 ├── dpo.ipynb              # legacy DPO (kept for reference)
 ├── reward_model.ipynb     # rubert reward model
-├── eval_only.ipynb        # multi-candidate eval with HF checkpoint resume
+├── eval_only.ipynb        # multi-candidate eval; local/Kaggle-output only by default
 ├── businessgpt_bench.ipynb # local labeling UI + best-of-N
 ├── preprocess.ipynb       # Telegram JSON → train/val
 ├── merge_and_push.py      # LoRA → GGUF → HF
@@ -164,7 +168,7 @@ businessgpt_retrain/
     └── _diag_pairs.py            # one-shot: preference data diagnostics
 ```
 
-Private data (chat JSON, train/val, generations, ratings, preference pairs) is on Kaggle dataset `alextech123/businessraw` (raw) and `<user>/businessgpt-eval` (derived). Model checkpoints are on HuggingFace under `vXofi/`.
+Private data (chat JSON, train/val, generations, ratings, preference pairs) is on Kaggle dataset `alextech123/businessraw` (raw) and `<user>/businessgpt-eval` (derived). Model checkpoints are on HuggingFace under `vXofi/`. Eval generations must not be uploaded to HF model repos unless the prompt pool has been sanitized/public.
 
 ---
 

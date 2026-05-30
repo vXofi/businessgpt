@@ -15,14 +15,19 @@ val_examples.json
 
 # Eval artifacts containing private chat fragments
 eval/generations_*.json
-eval/golden_prompts.json
+eval/golden_prompts*.json
 eval/ratings_*.json
 eval/preference_pairs*.jsonl
 eval/sft_augment.jsonl
 eval/distilled_*.jsonl
-eval/distilled_*.failures
+eval/distilled_*.jsonl.failures
+eval/distilled_*.jsonl.rejected
+eval/distill_exp*.jsonl
+eval/distill_debug*.jsonl
+eval/distill_ratings_*.json
 eval/*.bak
 eval/dataset-metadata.json
+datasets/
 
 # Local model checkpoints (multi-GB; pushed to HF instead)
 businessgpt_*_model/

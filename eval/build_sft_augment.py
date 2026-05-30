@@ -48,6 +48,10 @@ _CJK_RE = __import__("re").compile(r"[一-鿿㐀-䶿]")
 # v12+ suppressed it in outputs but the pattern is still in chosen data,
 # and 9B+ capacity could re-learn it from noise.
 _GAY_SPAM_RE = __import__("re").compile(r"(?i)i\s*am\s+\d+(?:\.\d+)?%\s*gay|im\s+\d+(?:\.\d+)?%\s*gay")
+_POISON_RE = __import__("re").compile(
+    r"\bзел[её]н\w*|ч[её]\s+вы\s+гомики\s+молчите|а\s+ч[её]\s+вы\s+все\s+молчите|молчание\s+знак\s+согласия",
+    __import__("re").IGNORECASE,
+)
 
 
 def build():
@@ -86,6 +90,13 @@ def build():
                 stats.setdefault("gay_spam_filtered", 0)
                 stats["gay_spam_filtered"] += 1
                 continue
+            full_pair_text = "\n".join(
+                m.get("content", "") for m in (p.get("prompt") or []) + (p.get("chosen") or [])
+            )
+            if _POISON_RE.search(full_pair_text):
+                stats.setdefault("poison_filtered", 0)
+                stats["poison_filtered"] += 1
+                continue
 
             dedup_key = (p["prompt_id"], chosen_text)
             if dedup_key in seen:
@@ -122,6 +133,7 @@ def build():
     print(f"  too long:       {stats['too_long']}  (> {MAX_LEN} chars)")
     print(f"  cjk filtered:   {stats.get('cjk_filtered', 0)}")
     print(f"  gay-spam filt:  {stats.get('gay_spam_filtered', 0)}")
+    print(f"  poison filtered:{stats.get('poison_filtered', 0)}")
     print(f"  dedup skipped:  {stats['dedup_skipped']}  (same (prompt_id, chosen))")
     print(f"Unique kept:      {stats['kept']}")
     print(f"Emitted (with super-replication x{SUPER_REPEAT}): {stats['emitted']}")

@@ -1,21 +1,29 @@
-"""One-shot script to seed eval/golden_prompts.json.
+"""Seed eval golden prompt files.
 
-Run once from repo root:
+Run from repo root:
     python3 eval/_seed_golden.py
 
-Output: eval/golden_prompts.json with ~600 prompts across 4 categories.
-User edits afterwards (remove garbage, add more rap/fact/edge).
+Outputs:
+  eval/golden_prompts.json          dense sliding-window pool
+  eval/golden_prompts_diverse.json  downsampled pool for labeling/RM/ORPO
 """
 
 import json
 import random
+import re
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 VAL_PATH = REPO / "val.jsonl"
 OUT_PATH = REPO / "eval" / "golden_prompts.json"
+DIVERSE_OUT_PATH = REPO / "eval" / "golden_prompts_diverse.json"
 
 random.seed(42)
+
+POISON_RE = re.compile(
+    r"\bзел[её]н\w*|ч[её]\s+вы\s+гомики\s+молчите|а\s+ч[её]\s+вы\s+все\s+молчите|молчание\s+знак\s+согласия",
+    re.IGNORECASE,
+)
 
 
 def chat_prompts_from_val() -> list[dict]:
@@ -35,11 +43,65 @@ def chat_prompts_from_val() -> list[dict]:
             context_lines = [l for l in user_msg["content"].split("\n") if l.strip()]
             if len(context_lines) < 2:
                 continue
+            if any(POISON_RE.search(line) for line in context_lines):
+                continue
             out.append({
                 "id": f"chat_{i:04d}",
                 "category": "chat",
                 "context": context_lines,
             })
+    return out
+
+
+def _overlap(a: list[str], b: list[str]) -> float:
+    """Containment-style overlap for adjacent sliding windows."""
+    sa, sb = set(a), set(b)
+    if not sa or not sb:
+        return 0.0
+    inter = len(sa & sb)
+    return max(inter / len(sa), inter / len(sb))
+
+
+def diverse_chat_prompts(chat: list[dict], *, max_per_run: int = 8, threshold: float = 0.85) -> list[dict]:
+    """Downsample near-duplicate sliding-window chat prompts.
+
+    Consecutive validation windows often share >85% of lines. Keep evenly spaced
+    representatives from each run so labels are closer to independent examples.
+    """
+    if not chat:
+        return []
+
+    runs = []
+    cur = [chat[0]]
+    for prev, item in zip(chat, chat[1:]):
+        if _overlap(prev["context"], item["context"]) >= threshold:
+            cur.append(item)
+        else:
+            runs.append(cur)
+            cur = [item]
+    runs.append(cur)
+
+    out = []
+    for run_idx, run in enumerate(runs, 1):
+        if len(run) <= max_per_run:
+            picked = run
+        else:
+            # Even spacing, preserving first and last. Avoid duplicate indices
+            # when max_per_run is small relative to run length.
+            raw = [round(i * (len(run) - 1) / (max_per_run - 1)) for i in range(max_per_run)]
+            indices = []
+            for idx in raw:
+                if idx not in indices:
+                    indices.append(idx)
+            picked = [run[i] for i in indices]
+
+        for item in picked:
+            item = dict(item)
+            item["dense_source_id"] = item["id"]
+            item["dense_run"] = run_idx
+            item["dense_run_size"] = len(run)
+            item["id"] = f"chatd_{len(out) + 1:04d}"
+            out.append(item)
     return out
 
 
@@ -142,12 +204,24 @@ def edge_prompts() -> list[dict]:
 
 
 def main():
-    chat = chat_prompts_from_val()
-    rap = rap_prompts()
-    fact = fact_prompts()
-    edge = edge_prompts()
+    if VAL_PATH.is_file():
+        chat = chat_prompts_from_val()
+        rap = rap_prompts()
+        fact = fact_prompts()
+        edge = edge_prompts()
+    elif OUT_PATH.is_file():
+        print(f"{VAL_PATH} missing; deriving diverse set from existing {OUT_PATH}")
+        existing = json.loads(OUT_PATH.read_text(encoding="utf-8"))
+        chat = [p for p in existing if p["category"] == "chat"]
+        rap = [p for p in existing if p["category"] == "rap_trigger"]
+        fact = [p for p in existing if p["category"] == "fact"]
+        edge = [p for p in existing if p["category"] == "edge"]
+    else:
+        raise FileNotFoundError(f"Neither {VAL_PATH} nor {OUT_PATH} exists")
 
     all_prompts = chat + rap + fact + edge
+    diverse_chat = diverse_chat_prompts(chat)
+    diverse_prompts = diverse_chat + rap + fact + edge
 
     # Mark 20 random chat prompts as held-out for regression eval
     held_out_count = 20
@@ -155,12 +229,23 @@ def main():
     for p in all_prompts:
         p["held_out"] = p["id"] in held_out_ids
 
-    with open(OUT_PATH, "w", encoding="utf-8") as f:
-        json.dump(all_prompts, f, ensure_ascii=False, indent=1)
+    diverse_held_out_count = min(20, len(diverse_chat))
+    diverse_held_out_ids = set(random.sample([p["id"] for p in diverse_chat], diverse_held_out_count))
+    for p in diverse_prompts:
+        p["held_out"] = p["id"] in diverse_held_out_ids
+
+    if VAL_PATH.is_file():
+        with open(OUT_PATH, "w", encoding="utf-8") as f:
+            json.dump(all_prompts, f, ensure_ascii=False, indent=1)
+    with open(DIVERSE_OUT_PATH, "w", encoding="utf-8") as f:
+        json.dump(diverse_prompts, f, ensure_ascii=False, indent=1)
 
     print(f"Wrote {len(all_prompts)} prompts to {OUT_PATH}")
     print(f"  chat: {len(chat)}  rap: {len(rap)}  fact: {len(fact)}  edge: {len(edge)}")
     print(f"  held_out: {held_out_count}")
+    print(f"Wrote {len(diverse_prompts)} prompts to {DIVERSE_OUT_PATH}")
+    print(f"  chat: {len(diverse_chat)}  rap: {len(rap)}  fact: {len(fact)}  edge: {len(edge)}")
+    print(f"  held_out: {diverse_held_out_count}")
 
 
 if __name__ == "__main__":

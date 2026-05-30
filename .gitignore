@@ -36,6 +36,9 @@ outputs/
 *.safetensors
 *.gguf
 *.bin
+*.tar
+*.tar.gz
+*.tgz
 adapter_*.json
 adapter_*.safetensors
 

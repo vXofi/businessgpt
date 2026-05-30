@@ -6,8 +6,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PORT=8000
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential cmake \
+    && apt-get install -y --no-install-recommends build-essential ca-certificates cmake git \
     && rm -rf /var/lib/apt/lists/*
+
+RUN git clone --depth 1 https://github.com/ggml-org/llama.cpp /opt/llama.cpp \
+    && cmake -B /opt/llama.cpp/build -S /opt/llama.cpp -DCMAKE_BUILD_TYPE=Release \
+    && cmake --build /opt/llama.cpp/build --target llama-server -j
 
 WORKDIR /app
 COPY api/requirements.txt ./requirements.txt

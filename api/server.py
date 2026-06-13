@@ -4,6 +4,7 @@ import re
 import socket
 import subprocess
 import time
+from typing import Literal
 from typing import Optional
 
 import httpx
@@ -31,8 +32,15 @@ SYSTEM_PROMPT = os.environ.get(
 )
 
 
+class ChatMessage(BaseModel):
+    role: Literal["system", "user", "assistant"]
+    content: str = Field(..., min_length=1)
+    name: Optional[str] = None
+
+
 class GenerateRequest(BaseModel):
-    prompt: str = Field(..., min_length=1)
+    prompt: Optional[str] = Field(None, min_length=1)
+    messages: Optional[list[ChatMessage]] = None
     max_tokens: int = Field(256, ge=1, le=1024)
     temperature: float = Field(0.7, ge=0.0, le=2.0)
     top_p: float = Field(0.9, ge=0.0, le=1.0)
@@ -61,6 +69,33 @@ def _format_prompt(user_prompt: str) -> str:
         f"<|im_start|>user\n{user_prompt.strip()}<|im_end|>\n"
         "<|im_start|>assistant\n"
     )
+
+
+def _message_content(message: ChatMessage) -> str:
+    content = message.content.strip()
+    if message.role == "user" and message.name:
+        return f"{message.name.strip()}: {content}"
+    return content
+
+
+def _format_messages(messages: list[ChatMessage]) -> str:
+    parts = [f"<|im_start|>system\n{SYSTEM_PROMPT}<|im_end|>"]
+    for message in messages:
+        # The deployment owns the system prompt; caller-provided system messages
+        # are ignored to keep behavior stable across bot integrations.
+        if message.role == "system":
+            continue
+        parts.append(f"<|im_start|>{message.role}\n{_message_content(message)}<|im_end|>")
+    parts.append("<|im_start|>assistant\n")
+    return "\n".join(parts)
+
+
+def _format_request(req: GenerateRequest) -> str:
+    if req.messages:
+        return _format_messages(req.messages)
+    if req.prompt:
+        return _format_prompt(req.prompt)
+    raise HTTPException(status_code=422, detail="either prompt or messages is required")
 
 
 def _clean_response(text: str) -> str:
@@ -137,7 +172,7 @@ def generate(req: GenerateRequest) -> GenerateResponse:
 
     started = time.perf_counter()
     payload = {
-        "prompt": _format_prompt(req.prompt),
+        "prompt": _format_request(req),
         "n_predict": req.max_tokens,
         "temperature": req.temperature,
         "top_p": req.top_p,

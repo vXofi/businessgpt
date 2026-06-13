@@ -93,6 +93,106 @@ docker run -d --name businessgpt-api --restart unless-stopped \
 
 For production, put Nginx/Caddy in front of `127.0.0.1:8000` and terminate TLS there. Keep the model API bound to localhost.
 
+## Domain + HTTPS
+
+Point an `A` record for your API domain to the VM public IP:
+
+```text
+api.example.com  A  <vm-public-ip>
+```
+
+In the Yandex security group:
+
+- allow TCP `80` from `0.0.0.0/0`
+- allow TCP `443` from `0.0.0.0/0`
+- remove public TCP `8000` after HTTPS works
+- keep SSH `22` restricted to your own IP
+
+Run the model API on localhost only:
+
+```bash
+docker rm -f businessgpt-api
+docker run -d --name businessgpt-api --restart unless-stopped \
+  -p 127.0.0.1:8000:8000 \
+  -e BUSINESSGPT_MODEL_PATH=/models/model-Q5_K_M.gguf \
+  -e BUSINESSGPT_API_KEY='your-token' \
+  -e BUSINESSGPT_N_CTX=2048 \
+  -e BUSINESSGPT_N_THREADS=8 \
+  -v /opt/businessgpt/models:/models:ro \
+  businessgpt-api:llama-server
+```
+
+Use Caddy as the public HTTPS reverse proxy:
+
+```bash
+mkdir -p /opt/businessgpt/caddy
+cat > /opt/businessgpt/caddy/Caddyfile <<'EOF'
+api.example.com {
+    reverse_proxy 127.0.0.1:8000
+}
+EOF
+
+docker rm -f businessgpt-caddy
+docker run -d --name businessgpt-caddy --restart unless-stopped \
+  --network host \
+  -v /opt/businessgpt/caddy/Caddyfile:/etc/caddy/Caddyfile:ro \
+  -v businessgpt_caddy_data:/data \
+  -v businessgpt_caddy_config:/config \
+  caddy:2
+```
+
+Caddy will request and renew TLS certificates automatically. If certificate
+issuance fails, first check that DNS resolves to the VM and ports `80`/`443` are
+open publicly.
+
+Test:
+
+```bash
+curl -s https://api.example.com/health
+curl -s https://api.example.com/generate \
+  -H "Authorization: Bearer your-token" \
+  -H "Content-Type: application/json" \
+  -d '{"prompt":"сосал?","max_tokens":64,"temperature":0.7}'
+```
+
+Telegram bot endpoint:
+
+```text
+https://api.example.com/generate
+```
+
+## Updating the Container
+
+`api/server.py` is copied into the Docker image:
+
+```dockerfile
+COPY api/server.py ./server.py
+```
+
+So API code changes require rebuilding and restarting the container. If
+`api/Dockerfile` did not change, do not use `--no-cache`: Docker will reuse the
+slow llama.cpp build layer and only refresh the app layer.
+
+On the VM:
+
+```bash
+cd /opt/businessgpt/app
+git pull
+docker rm -f businessgpt-api
+docker build -f api/Dockerfile -t businessgpt-api:llama-server .
+docker run -d --name businessgpt-api --restart unless-stopped \
+  -p 127.0.0.1:8000:8000 \
+  -e BUSINESSGPT_MODEL_PATH=/models/model-Q5_K_M.gguf \
+  -e BUSINESSGPT_API_KEY='your-token' \
+  -e BUSINESSGPT_N_CTX=2048 \
+  -e BUSINESSGPT_N_THREADS=8 \
+  -v /opt/businessgpt/models:/models:ro \
+  businessgpt-api:llama-server
+```
+
+Use `--no-cache` only after changing the llama.cpp build layer or when a cached
+Docker layer is suspected to be broken.
+
 ## Notes
 
 - Q5_K_M is the practical first quant for quality. Q4_K_M is cheaper in RAM and usually worse.

@@ -27,6 +27,7 @@ BusinessGPT is a Russian informal group-chat chatbot trained to sound like a spe
 - `reward_model.ipynb`: trains `DeepPavlov/rubert-base-cased` pairwise reward model.
 - `merge_and_push.py`: local HF download, LoRA merge, llama.cpp conversion, quantization, and HF push.
 - `eval/*.py`: small data/eval utilities for distillation, preference pair construction, SFT augment construction, ranking, diagnostics, and bot-pattern scanning.
+- Deployment/API/server infrastructure now lives in the sibling repo `../hugeballs-server`. Keep this repo focused on training, eval, distillation, and model export.
 
 ## Private Data And Artifacts
 

@@ -60,6 +60,7 @@ __pycache__/
 
 # Portfolio (separate workspace if exists)
 portfolio/
+itmo_portfolio_businessgpt.*
 
 # Kaggle config (contains API token)
 .kaggle/

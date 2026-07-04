@@ -14,7 +14,7 @@ Operational notes for local scripts. Private/generated files are gitignored. Kee
 | `eval/scan_bot_patterns.py` | Find repeated bot-like patterns in raw Telegram export |
 | `eval/filter_train_gay_spam.py` | Legacy cleanup for `I am N% gay` target spam |
 | `merge_and_push.py` | Edit config, merge LoRA, convert/quantize GGUF, push to HF |
-| `test_gemma_e2b_q4.py` | Old CPU RAM/speed sanity check for Gemma E2B |
+| `scripts/legacy/test_gemma_e2b_q4.py` | Old CPU RAM/speed sanity check for Gemma E2B |
 
 ## Distillation
 
@@ -139,7 +139,7 @@ Summarize experiment costs/statuses:
 python3 eval/distill_responses.py summary eval/distill_debug_deepseek_reasoning_low_1000.jsonl
 ```
 
-Review in `businessgpt_bench.ipynb`:
+Review in `notebooks/local/businessgpt_bench.ipynb`:
 
 ```python
 distill_experiment_ui("eval/distill_exp_nextmsg_v1.jsonl", session_size=20, seed=42)
@@ -149,7 +149,7 @@ distill_model_failures("eval/distill_exp_nextmsg_v1.jsonl", model="openai/gpt-ch
 
 ### Full Distillation Mode
 
-First create/export `train.jsonl` from `training.ipynb` on Kaggle. The notebook now writes it from `train_data`.
+First create/export `train.jsonl` from `notebooks/training.ipynb` on Kaggle. The notebook now writes it from `train_data`.
 
 Run full distillation:
 
@@ -264,7 +264,7 @@ python3 eval/build_preference_pairs.py --upload-kaggle
 
 ### Build Multi-Candidate Preference Pairs
 
-Use this after `eval_only.ipynb` creates `eval/generations_v16_multi.json` and you label it with:
+Use this after `notebooks/eval_only.ipynb` creates `eval/generations_v16_multi.json` and you label it with:
 
 ```python
 pairwise_ui_multi("v16", session_size=30)
@@ -280,9 +280,9 @@ Output:
 
 - `eval/preference_pairs_v16_multi.jsonl`
 
-Then add that file to the `businessgpt-eval` Kaggle dataset before running `orpo.ipynb` or `reward_model.ipynb`.
+Then add that file to the `businessgpt-eval` Kaggle dataset before running `notebooks/orpo.ipynb` or `notebooks/reward_model.ipynb`.
 
-Privacy note: `eval_only.ipynb`, `training.ipynb`, `dpo.ipynb`, and `orpo.ipynb` default to `UPLOAD_EVAL_TO_HF = False`. Leave it off for private chat-derived prompts.
+Privacy note: `notebooks/eval_only.ipynb`, `notebooks/training.ipynb`, `notebooks/archive/dpo.ipynb`, and `notebooks/orpo.ipynb` default to `UPLOAD_EVAL_TO_HF = False`. Leave it off for private chat-derived prompts.
 
 If private eval artifacts were already uploaded to a model repo, dry-run and then purge:
 
@@ -309,14 +309,14 @@ Output:
 
 This emits chosen-only SFT examples and filters CJK/gay-spam/noisy length outliers.
 
-For v16+, `training.ipynb` keeps this old augment disabled by default via
+For v16+, `notebooks/training.ipynb` keeps this old augment disabled by default via
 `USE_OLD_SFT_AUGMENT=False`. Treat it as an ablation input, not the default
 training mix, because it is built from old model generations selected in
 v11-v13 comparisons.
 
 ## Reward Model Re-Ranking
 
-After `eval_only.ipynb` writes `eval/generations_v16_multi.json` and `reward_model.ipynb` pushes the RM:
+After `notebooks/eval_only.ipynb` writes `eval/generations_v16_multi.json` and `notebooks/reward_model.ipynb` pushes the RM:
 
 ```bash
 python3 eval/rank_with_rm.py \
@@ -347,7 +347,7 @@ python3 eval/scan_bot_patterns.py \
   --top 40
 ```
 
-If a repeated artifact is real contamination, add a regex to `_BOT_LEAK_PATTERNS` in `training.ipynb`.
+If a repeated artifact is real contamination, add a regex to `_BOT_LEAK_PATTERNS` in `notebooks/training.ipynb`.
 
 Legacy gay-spam cleanup:
 

@@ -72,7 +72,7 @@ The chat is split at the **first appearance of BusinessGPT** in the group:
 
 ### Chat Pipeline (v12)
 
-Inline in `training.ipynb` (not the separate `preprocess.ipynb`). Differences vs v5 doc below:
+Inline in `notebooks/training.ipynb` (not the separate `notebooks/archive/preprocess.ipynb`). Differences vs v5 doc below:
 
 1. **Standard filter** additionally drops messages matching `r"I am \d+% gay"` (Telegram "gay-test" game bot output that polluted the chat as fake user turns; before v12 it was 169/5229 train targets and 801 contexts). Same regex check at record-extraction time so it can't appear as either context or target.
 2. **Real names** instead of anonymous `<user_N>` tokens (since v8): `Name: message`. Provides semantic grounding.
@@ -175,7 +175,7 @@ Key differences from v5: all context messages are in a single flat `user` messag
 - `GRAD_ACCUM` 8 → 16: keeps effective batch=16 while halving per-step memory pressure
 - Everything else stays — same LR, optimizer, NEFTune, etc.
 
-**Pipeline change**: inline eval at end of `training.ipynb` is **disabled** (`RUN_EVAL_AT_END=False`). 9B inference at 4 candidates × 631 prompts blows past Kaggle's 12 h budget. Eval lives in `eval_only.ipynb` which has its own fresh budget + HF-checkpointed resume.
+**Pipeline change**: inline eval at end of `notebooks/training.ipynb` is **disabled** (`RUN_EVAL_AT_END=False`). 9B inference at 4 candidates × 631 prompts blows past Kaggle's 12 h budget. Eval lives in `notebooks/eval_only.ipynb` which has its own fresh budget + HF-checkpointed resume.
 
 ### Training (v14)
 
@@ -350,8 +350,8 @@ Strips Qwen3 `<think>` blocks and any leaked speaker tokens from generation star
 
 ### Architecture
 
-- **Generation lives on Kaggle**: at end of `training.ipynb`, model is already in memory → run `chat()` on the full golden pool → save `eval/generations_v<N>.json`. Pure batch, no UI, **background-mode safe** (Kaggle "Save & Run All"). Historical note: this used to push generations to HF for convenience; that is now disabled because generations contain private chat context.
-- **Labeling lives locally**: `businessgpt_bench.ipynb` opens in Jupyter on Mac (or Colab), loads two `generations_v<N>.json` files, shows ipywidgets blind A/B UI, writes decisions to `eval/ratings_<A>_vs_<B>.json` incrementally (crash/restart safe). Already-rated prompts are skipped on re-open.
+- **Generation lives on Kaggle**: at end of `notebooks/training.ipynb`, model is already in memory → run `chat()` on the full golden pool → save `eval/generations_v<N>.json`. Pure batch, no UI, **background-mode safe** (Kaggle "Save & Run All"). Historical note: this used to push generations to HF for convenience; that is now disabled because generations contain private chat context.
+- **Labeling lives locally**: `notebooks/local/businessgpt_bench.ipynb` opens in Jupyter on Mac (or Colab), loads two `generations_v<N>.json` files, shows ipywidgets blind A/B UI, writes decisions to `eval/ratings_<A>_vs_<B>.json` incrementally (crash/restart safe). Already-rated prompts are skipped on re-open.
 
 ### Files
 
@@ -384,7 +384,7 @@ eval/
 ### Workflow per training cycle
 
 1. Train v<N> on Kaggle (background OK).
-2. Eval cell at end of `training.ipynb` writes `eval/generations_v<N>.json`, pushes to HF.
+2. Eval cell at end of `notebooks/training.ipynb` writes `eval/generations_v<N>.json`, pushes to HF.
 3. Locally: place Kaggle output under `eval/`, then `load_generations("v<N>")`.
 4. Run `guardrails_table("v<N-1>", "v<N>")` — verify no regression on auto checks.
 5. Run `pairwise_ui("v<N-1>", "v<N>", session_size=30)` — label a session. Repeat across multiple sessions to expand coverage.
@@ -403,7 +403,7 @@ Synthetic generations with 50% gay-spam and 10% Chinese in v_dirty, 0% in v_clea
 - **Risks**:
   - **Style collapse** — DPO often makes models "safer" / more generic. We want the opposite. Mitigated by `beta=0.3` (high) to stay close to SFT distribution.
   - **Prompt contamination** — prompts in DPO pairs leak when evaluating on the same pool. The `held_out: true` slice in `golden_prompts.json` is reserved for clean post-DPO eval.
-- **Implementation**: see `eval/build_preference_pairs.py` (converter) and `dpo.ipynb` (Kaggle DPO trainer). Pipeline section below has the full flow.
+- **Implementation**: see `eval/build_preference_pairs.py` (converter) and `notebooks/archive/dpo.ipynb` (Kaggle DPO trainer). Pipeline section below has the full flow.
 
 ---
 
@@ -411,9 +411,9 @@ Synthetic generations with 50% gay-spam and 10% Chinese in v_dirty, 0% in v_clea
 
 End-to-end for one iteration cycle. Models live on HF; data lives Kaggle/local.
 
-### A. SFT iteration (`training.ipynb` → `vXofi/businessgpt-v<N>-qwen3.5-2b`)
+### A. SFT iteration (`notebooks/training.ipynb` → `vXofi/businessgpt-v<N>-qwen3.5-2b`)
 
-1. **Edit cells in `training.ipynb`:**
+1. **Edit cells in `notebooks/training.ipynb`:**
    - Cell `64987c61` (title): describe what changed in v<N>
    - Cell `184b2693`: bump `SAVE_DIR = "businessgpt_v<N>_2b_model"`
    - Cell `36ba67fd`: bump `HF_REPO = "vXofi/businessgpt-v<N>-qwen3.5-2b"` and commit message
@@ -425,7 +425,7 @@ End-to-end for one iteration cycle. Models live on HF; data lives Kaggle/local.
    - SFT adapter pushed to `vXofi/businessgpt-v<N>-qwen3.5-2b`
    - `eval/generations_v<N>.json` (single, default-temp) AND `eval/generations_v<N>_multi.json` (4 candidates, for plan C DPO data) written to `/kaggle/working/eval/`. HF upload is now disabled for private eval data.
 
-### B. Eval (`businessgpt_bench.ipynb`, locally on Mac)
+### B. Eval (`notebooks/local/businessgpt_bench.ipynb`, locally on Mac)
 
 1. **Pull generations** — automatic on first call, cached afterward:
    ```python
@@ -446,7 +446,7 @@ End-to-end for one iteration cycle. Models live on HF; data lives Kaggle/local.
    ```
 5. **Optional GGUF for prod**: `python3 merge_and_push.py` (script auto-detects v<N> via `SOURCE_REPO` constant — bump it). With imatrix calibration on by default. Output: `vXofi/businessgpt-v<N>-qwen3.5-2b-gguf`.
 
-### C. DPO iteration (`dpo.ipynb` → `vXofi/businessgpt-v<N>-dpo-qwen3.5-2b`)
+### C. DPO iteration (`notebooks/archive/dpo.ipynb` → `vXofi/businessgpt-v<N>-dpo-qwen3.5-2b`)
 
 Run when total preference pairs across all `ratings_*.json` exceeds ~500.
 
@@ -458,7 +458,7 @@ Run when total preference pairs across all `ratings_*.json` exceeds ~500.
 2. **Upload to Kaggle dataset** (one-time setup, then re-version):
    - First time: `cd eval && kaggle datasets init -p . && <edit metadata id>` then `kaggle datasets create -p .`
    - Subsequent: `python3 eval/build_preference_pairs.py --upload-kaggle`  (or `kaggle datasets version -p eval -m "..."`)
-3. **Edit `dpo.ipynb` cell `dpo-config`**:
+3. **Edit `notebooks/archive/dpo.ipynb` cell `dpo-config`**:
    - `BASE_VERSION = "v<N>"`
    - `DPO_VERSION  = "v<N>-dpo"`
    - `SUPER_WEIGHT = 2` (replicates ★ super pairs in train; 1 = no weighting)
@@ -481,9 +481,9 @@ pairwise_ui("v<N>", "v<N>-dpo", session_size=20, category="chat")
 
 ```
 businessgpt_retrain/
-├── training.ipynb               # A. SFT (Kaggle)
-├── dpo.ipynb                    # C. DPO (Kaggle)
-├── businessgpt_bench.ipynb      # B + D. Local eval & labeling
+├── notebooks/training.ipynb               # A. SFT (Kaggle)
+├── notebooks/archive/dpo.ipynb                    # C. DPO (Kaggle)
+├── notebooks/local/businessgpt_bench.ipynb      # B + D. Local eval & labeling
 ├── merge_and_push.py            # B optional. Local GGUF merge + push
 └── eval/
     ├── golden_prompts.json      # Fixed eval pool (Kaggle dataset input)
@@ -508,7 +508,7 @@ businessgpt_retrain/
    kaggle datasets create -p .
    cd ..
    ```
-5. Attach the resulting dataset to both `training.ipynb` and `dpo.ipynb` Kaggle pages.
+5. Attach the resulting dataset to both `notebooks/training.ipynb` and `notebooks/archive/dpo.ipynb` Kaggle pages.
 
 ---
 
@@ -554,18 +554,18 @@ businessgpt_retrain/
 ```
 businessgpt_retrain/
 ├── PLAN.md                      # This report
-├── training.ipynb               # Main training notebook v11/v12 (Kaggle GPU, Qwen3.5-2B)
+├── notebooks/training.ipynb               # Main training notebook v11/v12 (Kaggle GPU, Qwen3.5-2B)
 ├── finetune.ipynb               # Older training notebook (v5–v8, Qwen3-0.6B / 0.8B)
-├── preprocess.ipynb             # Standalone preprocess (v5 era; v11+ embeds preprocess in training.ipynb)
-├── businessgpt_bench.ipynb      # Benchmark + eval framework (Colab/local)
-├── finetune_local.ipynb         # Local M3 Pro training version
+├── notebooks/archive/preprocess.ipynb             # Standalone preprocess (v5 era; v11+ embeds preprocess in notebooks/training.ipynb)
+├── notebooks/local/businessgpt_bench.ipynb      # Benchmark + eval framework (Colab/local)
+├── notebooks/archive/finetune_local.ipynb         # Local M3 Pro training version
 ├── merge_and_push.py            # Download v_N from HF, auto-detect LoRA vs full, merge, GGUF convert, push
 ├── eval/                        # Evaluation framework (NEW in v12)
 │   ├── golden_prompts.json      # Fixed prompt pool (~631 prompts: 581 chat + 30 rap + 10 fact + 10 edge)
 │   ├── _seed_golden.py          # One-shot script to regenerate golden_prompts from val.jsonl
-│   ├── generations_v<N>.json    # Per-version model outputs on the pool (written by training.ipynb)
+│   ├── generations_v<N>.json    # Per-version model outputs on the pool (written by notebooks/training.ipynb)
 │   └── ratings_<A>_vs_<B>.json  # Pairwise blind A/B decisions (written by bench notebook UI)
-├── train.jsonl, val.jsonl       # Old preprocess.ipynb output (still used to seed golden_prompts)
+├── train.jsonl, val.jsonl       # Old notebooks/archive/preprocess.ipynb output (still used to seed golden_prompts)
 ├── result.json                  # Cached Telegram export
 ├── lora_adapter/                # Older LoRA adapter copies
 ├── merged_model_v11/            # v11 merged safetensors + GGUF artifacts (local)
@@ -575,7 +575,7 @@ businessgpt_retrain/
 └── .kaggle/kaggle.json          # Kaggle API credentials
 ```
 
-### Notebook Cell Map (training.ipynb) — v12
+### Notebook Cell Map (notebooks/training.ipynb) — v12
 
 - Cell `cbf9f0df`: pip install (vllm, transformers from git)
 - Cell `7d4a3f55`: pip install (huggingface_hub, trl, kagglehub, datasets, accelerate, bitsandbytes, peft)
@@ -615,7 +615,7 @@ businessgpt_retrain/
 - Cell 23: Save model (`model.save_pretrained()`)
 - Cell 33: Push to hub via `HfApi.upload_folder()`
 
-### Notebook Cell Map (businessgpt_bench.ipynb) — v12
+### Notebook Cell Map (notebooks/local/businessgpt_bench.ipynb) — v12
 
 - Cell 1: pip install (transformers, ipywidgets — needed for eval UI)
 - Cell 2: Backend selection (`transformers` or `gguf`), `MODEL_ID` (v11/v12)

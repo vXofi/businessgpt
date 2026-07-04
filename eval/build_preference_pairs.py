@@ -150,7 +150,7 @@ def build():
 
 
 def upload_kaggle():
-    """Version-bump the businessgpt-eval Kaggle dataset so dpo.ipynb sees the new file.
+    """Version-bump the businessgpt-eval Kaggle dataset so notebooks/archive/dpo.ipynb sees the new file.
 
     Requires:
       - kaggle CLI installed and authenticated (~/.kaggle/kaggle.json)

@@ -9,7 +9,7 @@ Filters applied:
   - drop chosen > MAX_LEN chars (long-tail outliers, may not generalize)
 
 Tier weighting: super-tier examples are emitted twice (replication) so they
-appear 2x in training. Combined with AUGMENT_REPEAT=2 in training.ipynb,
+appear 2x in training. Combined with AUGMENT_REPEAT=2 in notebooks/training.ipynb,
 super examples end up at 4x and normal at 2x relative weight vs raw chat data.
 
 Output schema (one JSON per line, identical to train.jsonl format):

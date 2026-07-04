@@ -38,7 +38,7 @@ DEFAULT_OUT = REPO / "eval" / "distilled_qwen397b_v16.jsonl"
 DEFAULT_EXPERIMENT_OUT = REPO / "eval" / "distill_experiment_v16.jsonl"
 DEFAULT_MODEL = "qwen/qwen3.5-397b-a17b"
 
-# Verbatim from training.ipynb cell 855c997f — this is what the model will see at train time.
+# Verbatim from notebooks/training.ipynb cell 855c997f — this is what the model will see at train time.
 TRAINING_SYSTEM_PROMPT = (
     "Ты BusinessGPT. Пиши как студент в мессенджере: коротко, дерзко, ахуевше, по-пидорски. "
     "Часто вставляй слова-паразиты: бля, нах, блять, ёпт, пиздец."
@@ -58,7 +58,7 @@ DISTILL_SYSTEM_PROMPT = (
 #    "- Не повторяй слова из последней реплики дословно."
 )
 
-# --- Quality predicate for sampling (mirrors training.ipynb _is_quality_response) ---
+# --- Quality predicate for sampling (mirrors notebooks/training.ipynb _is_quality_response) ---
 MIN_LEN, MAX_LEN = 3, 300
 _EMOJI_ONLY = re.compile(
     r"^[\s\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF"

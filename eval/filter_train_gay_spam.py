@@ -1,8 +1,8 @@
 """Drop train.jsonl examples where the assistant turn is "I am N% gay!" spam.
 
-Origin: an external bot (not "BusinessGPT", which preprocess.ipynb already
+Origin: an external bot (not "BusinessGPT", which notebooks/archive/preprocess.ipynb already
 filters by sender name) posted these as chat replies — they slipped through
-because preprocess.ipynb only filters by sender, not content.
+because notebooks/archive/preprocess.ipynb only filters by sender, not content.
 
 We keep user-context occurrences (so the model sees "this happened in the
 chat") and only drop examples where the *assistant* response is this pattern,

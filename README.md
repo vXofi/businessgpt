@@ -31,14 +31,15 @@ mental model.
 | `REPO_NOTES.md` | Repo mental model and important lessons. |
 | `SCRIPT_GUIDE.md` | Commands for distillation, preference data, reward ranking, and export. |
 | `PLAN.md` | Retrospective history of older model versions. |
-| `training.ipynb` | SFT training notebook. |
-| `eval_only.ipynb` | Candidate generation notebook. |
-| `businessgpt_bench.ipynb` | Manual eval, labeling, and best-of-N review UI. |
-| `reward_model.ipynb` | RuBERT reward model training. |
-| `orpo.ipynb` | Parked ORPO research path. |
+| `notebooks/training.ipynb` | SFT training notebook. |
+| `notebooks/eval_only.ipynb` | Candidate generation notebook. |
+| `notebooks/local/businessgpt_bench.ipynb` | Manual eval, labeling, and best-of-N review UI. |
+| `notebooks/reward_model.ipynb` | RuBERT reward model training. |
+| `notebooks/orpo.ipynb` | Parked ORPO research path. |
 | `merge_and_push.py` | HF model/adapter merge, GGUF conversion, quantization, and push. |
 | `eval/` | Data/eval utility scripts. |
 | `prompts/` | Distillation prompt variants. |
+| `scripts/legacy/` | Old one-off helpers kept out of the root. |
 
 ## Setup
 
@@ -101,4 +102,3 @@ large model artifacts.
 
 Ignored local artifacts can become large. See `docs/LOCAL_ARTIFACTS.md` before
 deleting anything.
-

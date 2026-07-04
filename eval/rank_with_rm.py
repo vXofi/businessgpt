@@ -3,7 +3,7 @@
 Standalone CPU script — does NOT regenerate candidates, just scores existing
 ones and writes generations_{V}_bestof.json.
 
-Run after eval_only.ipynb finishes producing the multi.json:
+Run after notebooks/eval_only.ipynb finishes producing the multi.json:
     python3 eval/rank_with_rm.py --version v16
     python3 eval/rank_with_rm.py --version v16-orpo --rm-repo vXofi/businessgpt-reward-rubert
 
@@ -62,7 +62,7 @@ def main():
     bestof_path = args.eval_dir / f"generations_{args.version}_bestof.json"
 
     if not multi_path.is_file():
-        print(f"ERROR: {multi_path} not found. Run eval_only.ipynb for {args.version} first.",
+        print(f"ERROR: {multi_path} not found. Run notebooks/eval_only.ipynb for {args.version} first.",
               file=sys.stderr)
         sys.exit(1)
 

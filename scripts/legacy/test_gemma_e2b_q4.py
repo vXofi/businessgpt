@@ -13,9 +13,9 @@ Defaults to bartowski's non-abliterated GGUF — abliterated GGUF isn't publishe
 yet, but architecture is identical so memory/speed numbers transfer 1:1.
 
 Usage:
-    python3 test_gemma_e2b_q4.py
-    GGUF_REPO=foo/bar GGUF_FILE=model.gguf python3 test_gemma_e2b_q4.py
-    N_CTX=4096 N_THREADS=4 python3 test_gemma_e2b_q4.py
+    python3 scripts/legacy/test_gemma_e2b_q4.py
+    GGUF_REPO=foo/bar GGUF_FILE=model.gguf python3 scripts/legacy/test_gemma_e2b_q4.py
+    N_CTX=4096 N_THREADS=4 python3 scripts/legacy/test_gemma_e2b_q4.py
 
 Requirements: pip install llama-cpp-python huggingface_hub psutil
 """

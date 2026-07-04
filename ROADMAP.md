@@ -71,7 +71,7 @@ python3 eval/rank_with_rm.py \
 ```
 
 Then compare RM-selected outputs against default outputs in
-`businessgpt_bench.ipynb`.
+`notebooks/local/businessgpt_bench.ipynb`.
 
 Gate for moving RM into production:
 
@@ -173,12 +173,14 @@ businessgpt/
 ├── ROADMAP.md               # current project state and backlog
 ├── REPO_NOTES.md            # compact repo mental model
 ├── PLAN.md                  # retrospective notes through older versions
-├── training.ipynb           # SFT training notebook
-├── eval_only.ipynb          # candidate generation notebook
-├── businessgpt_bench.ipynb  # manual labeling / comparison UI
-├── orpo.ipynb               # parked ORPO research notebook
-├── reward_model.ipynb       # RuBERT reward model training
 ├── merge_and_push.py        # HF LoRA/full model -> GGUF export
+├── notebooks/
+│   ├── training.ipynb       # SFT training notebook
+│   ├── eval_only.ipynb      # candidate generation notebook
+│   ├── reward_model.ipynb   # RuBERT reward model training
+│   ├── orpo.ipynb           # parked ORPO research notebook
+│   ├── local/               # local review/labeling notebooks
+│   └── archive/             # legacy notebooks
 └── eval/
     ├── distill_responses.py
     ├── build_sft_augment.py
@@ -195,4 +197,3 @@ Server/API/deployment repo:
 ```text
 ../hugeballs-server
 ```
-

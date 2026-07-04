@@ -5,7 +5,7 @@ URLs, mentions, whitespace). High-cardinality clusters are usually bot output
 that leaked in under user names (slash commands, prediction bots, etc).
 
 Output: ranked list of clusters with count + sender distribution + sample text.
-Review the output, then add regexes to KNOWN_ARTIFACT_REGEXES in training.ipynb
+Review the output, then add regexes to KNOWN_ARTIFACT_REGEXES in notebooks/training.ipynb
 standard_filter so they get dropped before training.
 
 Run:

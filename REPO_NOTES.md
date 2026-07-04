@@ -6,15 +6,12 @@ BusinessGPT is a Russian informal group-chat chatbot trained to sound like a spe
 
 ## Current State
 
-- Current roadmap target is v16.
-- Production fallback is v14 SFT; v14-dpo is explicitly not shippable due gay-spam collapse.
-- v15 is a 9B SFT checkpoint recovered from a partial Kaggle run and still needs eval.
-- v16 plan is serial-gated:
-  1. Distill extra SFT examples from OpenRouter.
-  2. Train v16 SFT on Kaggle.
-  3. Train ORPO adapter on preference pairs.
-  4. Train RuBERT reward model.
-  5. Use reward model for best-of-N candidate ranking.
+- Current deployed baseline is v16 SFT, exported to GGUF and served from the sibling `../hugeballs-server` repo.
+- Production serving currently uses the 9B Qwen3.5-abliterated line with Q5_K_M as the practical quality/RAM quant.
+- v14 SFT is now a historical fallback; v14-dpo remains explicitly not shippable due gay-spam collapse.
+- ORPO was attempted for v16 but is parked because validation/test behavior was not good enough.
+- The RuBERT reward model trained successfully and is the next quality lever to evaluate through best-of-N reranking.
+- The runtime repetition issue in bot-heavy 1-on-1 chats appears mostly fixed by the latest formatting/API integration change, but should be monitored with real captured dialogs.
 
 ## Repo Shape
 
@@ -56,20 +53,20 @@ Docs say raw data comes from Kaggle dataset `alextech123/businessraw`, and deriv
 - Golden prompts cover chat, rap triggers, factual questions, and edge prompts.
 - Eval generation produces both single/default generations and four-candidate multi generations.
 - Manual pairwise ratings are stored as JSON and then converted into preference pairs.
-- v16 best-of-N uses a RuBERT reward model to score candidate responses and compare RM-selected output against default candidate idx 1.
+- v16 best-of-N should use the RuBERT reward model to score candidate responses and compare RM-selected output against default candidate idx 1 before any production integration.
 
 ## Things To Watch
 
-- The v16 cleanup pass fixed stale defaults in `training.ipynb`, `eval_only.ipynb`, `orpo.ipynb`, and `merge_and_push.py`.
+- The v16 cleanup pass fixed stale defaults in `training.ipynb`, `eval_only.ipynb`, `businessgpt_bench.ipynb`, `orpo.ipynb`, and `merge_and_push.py`, but old historical examples remain in some docs.
 - Distillation output is now consistently named `distilled_deepseek_v4pro_v16.jsonl` for the DeepSeek V4 Pro source model.
 - `build_sft_augment.py` docs mention old super-tier replication, while `SUPER_REPEAT = 1`; code is probably intentional, comments may be stale.
 
 ## Open Questions
 
-- Is v15 eval complete anywhere outside this repo, or should v16 start only after running `eval_only.ipynb` for v15?
-- v16 distillation is the next concrete task; output filename is now `distilled_deepseek_v4pro_v16.jsonl`.
-- Should ORPO use existing v14 multi preference pairs first, or should we regenerate and label v16 multi candidates before ORPO despite the extra manual labeling work?
-- What deployment target should guide export defaults now: 9B Q5_K_M on 12 GB CPU RAM, or are you still considering Gemma E2B / smaller models?
+- Did the Telegram bot fully switch to the structured `messages` request format, or only approximate it?
+- Does reward-model best-of-N improve real deployed failure prompts enough to justify server integration?
+- Which failure categories deserve targeted data work if RM reranking is not enough?
+- Should old manual generations be permanently excluded from future SFT, or re-reviewed and salvaged selectively?
 - What is the hard boundary for persona content? The docs say uncensored/no safety filters, but production bot behavior may still need explicit rules for privacy leaks, real names, and training-data memorization.
 
 ## 2026-05-23 Familiarization Pass
@@ -100,11 +97,11 @@ This is not an app repo yet; it is a training/evaluation lab for a private-style
 - Fixed: `training.ipynb` disabled-eval guidance points at v16.
 - Fixed: ORPO notebook section headings use ORPO wording.
 - Fixed: `merge_and_push.py` defaults to v16 export and uses preference-adapter wording.
-- `businessgpt_bench.ipynb` still opens as "BusinessGPT v11 (2B) Test Notebook" and has many v12-v15 defaults/calls. It is useful, but it is not v16-default-safe.
+- Fixed: `businessgpt_bench.ipynb` now opens with v16 model/GGUF defaults.
 
 ### Risk Notes
 
 - The persona is intentionally profane and private-chat-specific, so privacy/memorization risk is central, especially with real names and 9B capacity.
 - Bot-leak contamination has been a recurring failure mode; `_BOT_LEAK_PATTERNS` in `training.ipynb` and `eval/scan_bot_patterns.py` are important maintenance points after any data refresh.
 - Rap data is a style booster but can hijack generic prompts. v13 reduced this, and any future rap-ratio or trigger change should be evaluated against fact/edge prompts.
-- Preference pairs are partly stale/off-policy (`preference_pairs_v14_multi.jsonl` for v16 ORPO/RM). This is acknowledged in `ROADMAP.md`, but it remains the highest methodological risk in v16.
+- Preference pairs can become stale/off-policy quickly. For any future ORPO/retrain attempt, regenerate pairs from the current baseline rather than reusing old v14/v16-era artifacts blindly.

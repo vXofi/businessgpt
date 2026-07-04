@@ -1,184 +1,198 @@
 # BusinessGPT Roadmap
 
-Forward-looking plan. Retrospective notes live in `PLAN.md`.
+Forward-looking plan. Retrospective notes live in `PLAN.md`; detailed command
+reference lives in `SCRIPT_GUIDE.md`.
 
----
+## Current Snapshot
 
-## 🚀 Resume from here (after PC migration)
+As of July 2026, the active baseline is v16 SFT:
+
+- v16 SFT was trained, exported to GGUF, and deployed through the separate
+  `../hugeballs-server` repo.
+- The production shape is a 9B Qwen3.5 abliterated LoRA merged/exported to GGUF,
+  with Q5_K_M as the practical serving quant.
+- API/deployment code no longer lives here. This repo owns training, eval,
+  distillation, preference data, reward model tooling, and GGUF export.
+- The recent runtime repetition issue appears mostly fixed by moving the bot
+  integration toward structured chat formatting instead of feeding a flat
+  bot-heavy transcript. Keep monitoring, but do not treat it as an active
+  training blocker unless it recurs.
+- ORPO was attempted and should not be shipped right now; validation/test output
+  was not good enough.
+- The RuBERT reward model trained successfully and is the next available quality
+  lever.
+
+## Active Backlog
+
+### 1. Verify Runtime Input Format
+
+Confirm the Telegram bot sends either the structured `messages` request or an
+equivalent role-aware format to the server:
+
+```json
+{
+  "messages": [
+    {"role": "user", "name": "xofi", "content": "text"},
+    {"role": "assistant", "content": "previous bot answer"},
+    {"role": "user", "name": "xofi", "content": "next text"}
+  ],
+  "max_tokens": 128,
+  "temperature": 0.9,
+  "repetition_penalty": 1.2
+}
+```
+
+If repetition returns, use `eval/validate_runtime_context.py` against captured
+dialogs before changing training data.
+
+### 2. Build A Small Failure Set
+
+Collect real deployed failures before spending Kaggle time:
+
+- repetition / echoing old bot messages;
+- dead short answers;
+- observer/reviewer behavior instead of chat participant behavior;
+- memorized private phrases;
+- unwanted artifact phrases such as the old gay-spam family;
+- any new one-off pattern that appears more than once.
+
+Store private examples outside git, preferably in the `businessgpt-eval` Kaggle
+dataset.
+
+### 3. Evaluate Reward-Model Best-Of-N
+
+Use existing v16 multi-candidate generations if available; otherwise generate a
+small fresh set first.
 
 ```bash
-# 1. Clone + deps
+python3 eval/rank_with_rm.py \
+  --version v16 \
+  --rm-repo vXofi/businessgpt-reward-rubert
+```
+
+Then compare RM-selected outputs against default outputs in
+`businessgpt_bench.ipynb`.
+
+Gate for moving RM into production:
+
+- RM best-of-N wins clearly on real failure-style prompts;
+- no obvious preference for bland/long/safe answers;
+- no increased private-phrase memorization.
+
+If it passes, integrate best-of-N in `../hugeballs-server`, not this repo.
+
+### 4. Decide Whether To Retrain
+
+Do not start another Kaggle training run just because a few bugs exist. Retrain
+only if the failure set shows a pattern that inference formatting and RM
+reranking do not fix.
+
+Likely retrain inputs:
+
+- fresh chosen-only SFT augment from reviewed v16 outputs;
+- targeted distillation for failure categories;
+- stricter filtering for memorized/private phrases;
+- no stale old manual generations unless they pass current review.
+
+### 5. Keep ORPO Parked
+
+ORPO remains a research branch, not a production path. Revisit only after we
+have enough fresh v16 preference pairs and a narrow reason to believe ORPO will
+solve something RM reranking cannot.
+
+## Done / Parked
+
+| Item | Status | Notes |
+| --- | --- | --- |
+| API repo split | Done | Deployment lives in `../hugeballs-server`. |
+| v16 distillation | Done enough for v16 SFT | DeepSeek V4 Pro prompt/flow became the accepted source path. |
+| v16 SFT | Done | Current deployed baseline. |
+| GGUF export | Done | `merge_and_push.py` defaults to v16 9B Q5/Q4 exports. |
+| Runtime formatting fix | Probably fixed | Repetition reportedly happened only once after the change. |
+| ORPO | Parked | Attempted, but output was not acceptable. |
+| Reward model | Done | Use it for offline best-of-N validation next. |
+
+## Known Risks
+
+- Private generations/eval artifacts must not be pushed to HF model repos.
+- 9B capacity can memorize distinctive low-count phrases. Known example family:
+  "Зелёный диплом".
+- The `I am N% gay` artifact remains a known regression family and is filtered.
+- Rap data improves style but can hijack generic prompts if overrepresented.
+- One-on-one bot-heavy runtime chats are distribution-shifted from the original
+  group-chat training data.
+
+## Setup
+
+```bash
 git clone https://github.com/vXofi/businessgpt
 cd businessgpt
-python3 -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
-
-# 2. Env vars (copy from .env.template, fill in)
 cp .env.template .env
-# Edit .env: set OPENROUTER_API_KEY (https://openrouter.ai/keys)
-#                  HF_TOKEN (https://huggingface.co/settings/tokens, write scope)
-
-# 3. Private data from Kaggle
-#    Requires ~/.kaggle/kaggle.json (mode 600). Get from https://www.kaggle.com/settings/account
-kaggle datasets download alextech123/businessraw -p . --unzip       # raw chat → result.json
-kaggle datasets download avxofi/businessgpt-eval -p eval/ --unzip   # eval artifacts → eval/
-
-# 4. Resume v16 work — Phase 1 first
-source .env && export $(grep -v '^#' .env | xargs)   # load env vars
-python3 eval/distill_responses.py                     # ~$1.30 OpenRouter spend, ~5 min
-python3 eval/distill_responses.py --review > /tmp/review.md   # manual eyeball 30 samples
 ```
 
-**Phase gates** (each must pass before moving on — details in v16 section below):
+Set at least:
 
-| Phase | Gate | Action |
-|---|---|---|
-| 1 distill | ≥25/30 review accepted | upload to Kaggle: `kaggle datasets version -p eval -m 'v16 distill'` |
-| 2 SFT | eval_loss ∈ [2.8, 3.1] | run `training.ipynb` on Kaggle (LORA_REPO=v16) |
-| 3 ORPO | rewards/chosen ↑, rejected ↓, no NaN | run `orpo.ipynb` on Kaggle |
-| 4 RM | held-out acc ≥ 0.75 | run `reward_model.ipynb` on Kaggle |
-| 5 best-of-N | ≥60% wins over 50 prompts | `python3 eval/rank_with_rm.py --version v16` then `pairwise_ui_bestof` in bench |
-
-If any gate fails — see the Phase section below for the escalation path.
-
----
-
-## Where we are (May 2026)
-
-**v15** — Qwen3.5-9B-abliterated SFT pushed to `vXofi/businessgpt-v15-qwen3.5-9b`. Recovered from checkpoint-855 (1.5 / 2 epochs, eval_loss=3.10) after 12 h Kaggle timeout. Eval pending — run `eval_only.ipynb` for v15 generations + bench pairwise vs v14.
-
-**v14-dpo** — DPO collapse #3: heavily spams `🏳️‍🌈 I am N% gay!` despite ~0 in training pairs (length bias × distribution drift). Documented; do not ship.
-
-**Production fallback** — v14 SFT (1/631 = 0.16% gay-spam in outputs, below noise floor). Use until v15 is validated.
-
----
-
-## v16 — three concurrent quality moves
-
-Approved 2026-05-15. Goal: real quality jump, not regex band-aids. 14B base deferred to v17.
-
-Serial execution: each phase gates the next.
-
-### Phase 1: Distillation from DeepSeek V4 Pro via OpenRouter
-
-- **Script**: `eval/distill_responses.py` (already written, syntax-validated)
-- **Input**: 1000 contexts sampled from `train.jsonl` (filtered by `_is_quality_response`)
-- **System prompt**: `prompts/distill_nextmsg_v4_gpt.txt` — next-message chat participant prompt with `Правила распиздовки`
-- **Output record schema**: matches `sft_augment.jsonl` (training will load via existing path glob)
-- **Post-filter**: length, CJK, gay-spam, refusal markers, profanity gate (regex `\b(бля|блять|нах|нахуй|хуй|пизд|ёпт|епт|сука|ебан|еба)\b`)
-- **Cost**: DeepSeek V4 Pro debug run with `reasoning low`, `max_tokens=1000`, `exclude_reasoning` was ~$2.72 / 1000, 0 empty, 8/8 stop. Paired low/high review picked high 8/12, so use high primary with low fallback.
-- **Run**: `OPENROUTER_API_KEY=... python3 eval/distill_responses.py --model deepseek/deepseek-v4-pro --prompt-file prompts/distill_nextmsg_v4_gpt.txt --output eval/distilled_deepseek_v4pro_v16.jsonl --max-tokens 2400 --reasoning-effort high --exclude-reasoning --fallback-model deepseek/deepseek-v4-pro --fallback-reasoning-effort low --fallback-max-tokens 1000 --fallback-on failed,empty,refusal,too_long,too_short`
-- **Review**: `python3 eval/distill_responses.py --review > /tmp/review.md`, manual eyeball
-- **Gate**: ≥25/30 samples accepted, ≥700 records survive filter
-
-### Phase 2: v16 SFT
-
-- `training.ipynb` cells already updated for v16: title, augment loader, SAVE_DIR, HF_REPO, streaming checkpoint repo
-- Old `sft_augment.jsonl` is disabled by default (`USE_OLD_SFT_AUGMENT=False`) because it is stale v11-v13 model-output data and has carried artifacts. Use only as an ablation switch.
-- Hyperparams: 9B fp16, MAX_SEQ_LENGTH=768 after late CE-loss OOM at 1024, NUM_EPOCHS=1, batch=1, grad_accum=16, lr=5e-5, adamw_8bit, NEFTune=5, LoRA r=32 all-linear, DISTILL_REPEAT=1
-- Training filters rows containing known overfit poison token family `зел[её]н\w*`.
-- Upload distilled jsonl to Kaggle businessgpt-eval dataset before running
-- Run on Kaggle T4×2; ~10-11 h
-- Target: HF `vXofi/businessgpt-v16-qwen3.5-9b`
-- Then `eval_only.ipynb` (LORA_REPO=v16) → `generations_v16{,_multi}.json` in Kaggle output/local `eval/`. Do not push generations to HF; they contain private chat context.
-- Gate: `eval_loss ∈ [2.8, 3.1]`, smoke test produces profanity-bearing Russian
-
-### Phase 3: ORPO (replaces DPO)
-
-- `orpo.ipynb` ready (clone of dpo.ipynb with ORPOTrainer)
-- Uses fresh `eval/preference_pairs_v16_multi.jsonl` built from v16 multi-candidate labeling
-- Flow: `eval_only.ipynb` → `generations_v16_multi.json`; label with `pairwise_ui_multi("v16")`; build with `python3 eval/build_multi_preference_pairs.py --version v16`; upload to `businessgpt-eval`
-- ORPO config: `beta=0.1`, `lr=1e-5`, `num_epochs=2`, no precompute_ref (= no Qwen3.5 hybrid fp16 NaN trigger)
-- Pre-flight: `inspect.signature(ORPOConfig.__init__)` to verify param names (trl version drift)
-- Stability callback ported from DPO (abort on NaN/runaway margin)
-- Target: HF `vXofi/businessgpt-v16-orpo-qwen3.5-9b`
-- Gate: rewards/chosen rising + rewards/rejected falling in logs; no NaN; smoke gen non-`!!!!`
-
-### Phase 4: Reward model
-
-- `reward_model.ipynb` ready
-- Base: `DeepPavlov/rubert-base-cased` (180MB; fits production CPU RAM headroom alongside 9B Q5_K_M GGUF)
-- Train on `preference_pairs_v16_multi.jsonl` from fresh v16 labels
-- 4 epochs, lr=2e-5, batch=8, max_len=512, truncation_side=left
-- Target: HF `vXofi/businessgpt-reward-rubert`
-- **Strict gate**: held-out pairwise accuracy ≥ 0.75
-  - 0.70-0.75 → escalate to `sbert_large_nlu_ru`, retry
-  - <0.70 → labels too noisy, skip Phase 5, document failure
-
-### Phase 5: Best-of-N inference
-
-- `businessgpt_bench.ipynb`: `load_rm()`, `score_response()`, `chat_best_of_n()`, `pairwise_ui_bestof()` cells appended
-- `eval/rank_with_rm.py`: standalone CPU script — re-ranks existing `generations_v16_multi.json` → `generations_v16_bestof.json`
-- Pairwise UI compares bestof vs default (idx=1 of multi)
-- Gate: ≥60% win rate over 50 labeled prompts
-
----
-
-## v17 — 14B base (deferred from v16)
-
-After v16 ships and we know whether the 9B + distill + ORPO + best-of-N stack moves the needle:
-
-- Candidate: Qwen3.5-14B abliterated equivalent (check huihui-ai HF org for current variant; verify before pin)
-- Constraint: 14B Q4_K_M ≈ 8.5 GB GGUF, fits 12 GB prod CPU RAM
-- Training: QLoRA 4-bit base + fp16 LoRA on T4×2 (9B fp16 was already tight; 14B needs quantized base)
-- Same data composition as v16 (chat + rap + sft_augment + distilled)
-- Question to answer: is reasoning quality compute-bound at this dataset size, or does data become the bottleneck again?
-
----
-
-## Open questions / unresolved
-
-1. **Preference data staleness** — v14_multi pairs label v14 outputs. Mitigation: Phase 3 now requires fresh `v16_multi` labeling before ORPO/RM.
-
-2. **Single-example memorization on 9B** — "Зелёный диплом", "ни одной юбки" surface in v15 outputs from low-count training instances. The fundamental driver is 9B capacity vs ~10k example set. Regex blocklist (`_BOT_LEAK_PATTERNS` in `training.ipynb`) catches known patterns post-hoc. Structural levers if it stays a problem:
-   - Drop `AUGMENT_REPEAT` 2 → 1 (less amplification of pairwise-chosen)
-   - Higher `weight_decay` (0.01 → 0.05–0.1)
-   - Lower LoRA rank (32 → 16) — less capacity for memorization but weaker style
-   - tf-idf distinctiveness scan on train.jsonl assistant responses to flag rare-distinctive phrases for manual review
-
-3. **Production inference glue** — `chat_best_of_n` is implemented in the bench notebook. Production runs GGUF on llama.cpp at 12 GB CPU RAM. Mirror the score-and-rank logic in deployment code (separate task, not in this repo).
-
-4. **Style drift in distillation** — Qwen3.5-72B is RLHF'd; profanity gate is the mitigation. If post-filter rejection rate > 40%, swap distillation model (Mixtral 8x22B / Llama-3.3-70B / Qwen3.6-max) or relax the gate. Watch this on first Phase 1 run.
-
----
-
-## Repo layout
-
+```text
+OPENROUTER_API_KEY=...
+HF_TOKEN=...
 ```
-businessgpt_retrain/
-├── SCRIPT_GUIDE.md         # local script command reference
-├── ROADMAP.md             # this file — upcoming work
-├── PLAN.md                # retrospective notes (v1-v13)
-├── training.ipynb         # SFT (v16-ready)
-├── orpo.ipynb             # ORPO (v16-orpo)
-├── dpo.ipynb              # legacy DPO (kept for reference)
-├── reward_model.ipynb     # rubert reward model
-├── eval_only.ipynb        # multi-candidate eval; local/Kaggle-output only by default
-├── businessgpt_bench.ipynb # local labeling UI + best-of-N
-├── preprocess.ipynb       # Telegram JSON → train/val
-├── merge_and_push.py      # LoRA → GGUF → HF
+
+Private data sources:
+
+```bash
+kaggle datasets download alextech123/businessraw -p . --unzip
+kaggle datasets download avxofi/businessgpt-eval -p eval/ --unzip
+```
+
+## Current Command Pointers
+
+Distillation and data conversion commands are in `SCRIPT_GUIDE.md`.
+
+Reward-model reranking:
+
+```bash
+python3 eval/rank_with_rm.py \
+  --version v16 \
+  --rm-repo vXofi/businessgpt-reward-rubert
+```
+
+GGUF export:
+
+```bash
+GGUF_QUANTS=Q5_K_M,Q4_K_M python3 merge_and_push.py
+```
+
+## Repo Layout
+
+```text
+businessgpt/
+├── SCRIPT_GUIDE.md          # local script command reference
+├── ROADMAP.md               # current project state and backlog
+├── REPO_NOTES.md            # compact repo mental model
+├── PLAN.md                  # retrospective notes through older versions
+├── training.ipynb           # SFT training notebook
+├── eval_only.ipynb          # candidate generation notebook
+├── businessgpt_bench.ipynb  # manual labeling / comparison UI
+├── orpo.ipynb               # parked ORPO research notebook
+├── reward_model.ipynb       # RuBERT reward model training
+├── merge_and_push.py        # HF LoRA/full model -> GGUF export
 └── eval/
-    ├── distill_responses.py      # Phase 1: distill from frontier model
-    ├── build_sft_augment.py      # preference pairs → sft_augment.jsonl
-    ├── build_preference_pairs.py # ratings → pairs
-    ├── filter_train_gay_spam.py  # legacy: train.jsonl cleanup
-    ├── scan_bot_patterns.py      # raw chat → bot-leak pattern discovery
-    ├── rank_with_rm.py           # Phase 5: re-rank multi.json with RM
-    ├── _seed_golden.py           # one-shot: build initial golden_prompts.json
-    └── _diag_pairs.py            # one-shot: preference data diagnostics
+    ├── distill_responses.py
+    ├── build_sft_augment.py
+    ├── build_preference_pairs.py
+    ├── build_multi_preference_pairs.py
+    ├── rank_with_rm.py
+    ├── validate_runtime_context.py
+    ├── purge_hf_private_eval.py
+    └── scan_bot_patterns.py
 ```
 
-Private data (chat JSON, train/val, generations, ratings, preference pairs) is on Kaggle dataset `alextech123/businessraw` (raw) and `<user>/businessgpt-eval` (derived). Model checkpoints are on HuggingFace under `vXofi/`. Eval generations must not be uploaded to HF model repos unless the prompt pool has been sanitized/public.
+Server/API/deployment repo:
 
----
+```text
+../hugeballs-server
+```
 
-## Migration checklist (when moving to a new PC)
-
-1. `git clone <this repo>`
-2. Pull private data from Kaggle: `kaggle datasets download alextech123/businessraw -p . --unzip`
-3. Pull eval data from Kaggle: `kaggle datasets download <you>/businessgpt-eval -p eval/ --unzip`
-4. `pip install -r requirements.txt` (TODO: create one if not present)
-5. Set env: `OPENROUTER_API_KEY`, `HF_TOKEN` (for `huggingface_hub.login()`)
-6. `.env.template` for reference — actual `.env` is gitignored
-
-Models are downloaded on-demand from HF, not in the repo.

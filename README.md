@@ -31,6 +31,7 @@ mental model.
 | `REPO_NOTES.md` | Repo mental model and important lessons. |
 | `SCRIPT_GUIDE.md` | Commands for distillation, preference data, reward ranking, and export. |
 | `PLAN.md` | Retrospective history of older model versions. |
+| `docs/FAILURE_TRACKING.md` | Private failure-log tags and record shape. |
 | `notebooks/training.ipynb` | SFT training notebook. |
 | `notebooks/eval_only.ipynb` | Candidate generation notebook. |
 | `notebooks/local/businessgpt_bench.ipynb` | Manual eval, labeling, and best-of-N review UI. |

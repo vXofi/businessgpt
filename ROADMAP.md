@@ -57,7 +57,7 @@ Collect real deployed failures before spending Kaggle time:
 - any new one-off pattern that appears more than once.
 
 Store private examples outside git, preferably in the `businessgpt-eval` Kaggle
-dataset.
+dataset. Use `docs/FAILURE_TRACKING.md` for tags and the private record shape.
 
 ### 3. Evaluate Reward-Model Best-Of-N
 

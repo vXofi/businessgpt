@@ -1,0 +1,206 @@
+{
+  "schema_version": 1,
+  "experiment_id": "v16_oot_baseline_2026",
+  "seed_salt": "businessgpt-v16-eval-2026-07",
+  "prompts": {
+    "legacy": "Ты BusinessGPT. Пиши как студент в мессенджере: коротко, дерзко, ахуевше, по-пидорски. Часто вставляй слова-паразиты: бля, нах, блять, ёпт, пиздец.",
+    "production": "Ты BusinessGPT. Ты сидишь в закрытом студенческом Telegram-чате и вкидываешь следующее сообщение как свой, а не как ассистент.\n\nИстория выше — это контекст, а не список задач. Не отвечай каждому человеку по очереди и не пытайся закрыть все темы сразу. Выбери самый свежий заход или последнюю сильную реплику и кинь одну живую реакцию.\n\nНе разжевывай одну мысль на несколько абзацев: один острый заход обычно достаточно. Если скинули длинный пост или новость, реагируй как в чате; не пиши доклад и не пересказывай текст, если тебя прямо не попросили.\n\nТон короткий, грязный, дерзкий, смешной, по-пацански и по-пидорски. Мат можно и нужно: бля, нах, блять, ёпт, пиздец, хуй, нахуй, сука. Не превращай каждое слово в кашу из мата.\n\nФормат: только текст одного следующего сообщения. Без подписи, без \"name:\", без \"BusinessGPT:\", без markdown и без кавычек вокруг ответа."
+  },
+  "sampling_profiles": {
+    "controlled": {
+      "max_tokens": 256,
+      "temperature": 0.9,
+      "top_p": 0.9,
+      "top_k": 50,
+      "repetition_penalty": 1.1
+    },
+    "production_current": {
+      "max_tokens": 256,
+      "temperature": 0.9,
+      "top_p": 0.9,
+      "top_k": 50,
+      "repetition_penalty": 1.2
+    },
+    "repeat_1_0": {
+      "max_tokens": 256,
+      "temperature": 0.9,
+      "top_p": 0.9,
+      "top_k": 50,
+      "repetition_penalty": 1.0
+    },
+    "repeat_1_05": {
+      "max_tokens": 256,
+      "temperature": 0.9,
+      "top_p": 0.9,
+      "top_k": 50,
+      "repetition_penalty": 1.05
+    },
+    "repeat_1_2": {
+      "max_tokens": 256,
+      "temperature": 0.9,
+      "top_p": 0.9,
+      "top_k": 50,
+      "repetition_penalty": 1.2
+    }
+  },
+  "profiles": {
+    "v16_q5_legacy": {
+      "backend": "api",
+      "prompt_id": "legacy",
+      "sampling_id": "controlled",
+      "dataset_split": "text",
+      "subset_id": "main_text",
+      "limit": 60
+    },
+    "v16_q5_production": {
+      "backend": "api",
+      "prompt_id": "production",
+      "sampling_id": "controlled",
+      "dataset_split": "text",
+      "subset_id": "main_text",
+      "limit": 120
+    },
+    "v16_q5_production_current": {
+      "backend": "api",
+      "prompt_id": "production",
+      "sampling_id": "production_current",
+      "dataset_split": "text",
+      "subset_id": "main_text",
+      "limit": 120
+    },
+    "v15_hf_production": {
+      "backend": "hf",
+      "prompt_id": "production",
+      "sampling_id": "controlled",
+      "dataset_split": "text",
+      "subset_id": "main_text",
+      "limit": 120,
+      "model": {
+        "base_repo": "huihui-ai/Huihui-Qwen3.5-9B-abliterated",
+        "base_revision": "05b9e7c9b978ba29bdb8f50a49c30e4b91183339",
+        "adapter_repo": "vXofi/businessgpt-v15-qwen3.5-9b",
+        "adapter_revision": "c3ae14dc2f4ee7e1d83b8e372a7aa23c497f60ed"
+      }
+    },
+    "v16_hf_production": {
+      "backend": "hf",
+      "prompt_id": "production",
+      "sampling_id": "controlled",
+      "dataset_split": "text",
+      "subset_id": "main_text",
+      "limit": 120,
+      "model": {
+        "base_repo": "huihui-ai/Huihui-Qwen3.5-9B-abliterated",
+        "base_revision": "05b9e7c9b978ba29bdb8f50a49c30e4b91183339",
+        "adapter_repo": "vXofi/businessgpt-v16-qwen3.5-9b",
+        "adapter_revision": "53bb68c8e45610ed31d6fbbfc3e713ca9472444d"
+      }
+    },
+    "base_hf_production_40": {
+      "backend": "hf",
+      "prompt_id": "production",
+      "sampling_id": "controlled",
+      "dataset_split": "text",
+      "subset_id": "main_text",
+      "limit": 40,
+      "model": {
+        "base_repo": "huihui-ai/Huihui-Qwen3.5-9B-abliterated",
+        "base_revision": "05b9e7c9b978ba29bdb8f50a49c30e4b91183339"
+      }
+    },
+    "v16_q5_repeat_1_0": {
+      "backend": "api",
+      "prompt_id": "production",
+      "sampling_id": "repeat_1_0",
+      "dataset_split": "text",
+      "subset_id": "sampling40",
+      "limit": 40
+    },
+    "v16_q5_repeat_1_05": {
+      "backend": "api",
+      "prompt_id": "production",
+      "sampling_id": "repeat_1_05",
+      "dataset_split": "text",
+      "subset_id": "sampling40",
+      "limit": 40
+    },
+    "v16_q5_repeat_1_1": {
+      "backend": "api",
+      "prompt_id": "production",
+      "sampling_id": "controlled",
+      "dataset_split": "text",
+      "subset_id": "sampling40",
+      "limit": 40
+    },
+    "v16_q5_repeat_1_2": {
+      "backend": "api",
+      "prompt_id": "production",
+      "sampling_id": "repeat_1_2",
+      "dataset_split": "text",
+      "subset_id": "sampling40",
+      "limit": 40
+    },
+    "v16_q5_vision": {
+      "backend": "api",
+      "prompt_id": "production",
+      "sampling_id": "controlled",
+      "dataset_split": "vision",
+      "subset_id": "vision",
+      "limit": 36
+    },
+    "v16_q4_benchmark": {
+      "backend": "benchmark",
+      "prompt_id": "production",
+      "sampling_id": "controlled",
+      "dataset_split": "text",
+      "subset_id": "quant40",
+      "limit": 40
+    },
+    "v16_q5_benchmark": {
+      "backend": "benchmark",
+      "prompt_id": "production",
+      "sampling_id": "controlled",
+      "dataset_split": "text",
+      "subset_id": "quant40",
+      "limit": 40
+    }
+  },
+  "comparisons": {
+    "prompt_ablation": {
+      "mode": "pairwise",
+      "profiles": ["v16_q5_legacy", "v16_q5_production"]
+    },
+    "distillation_v15_v16": {
+      "mode": "pairwise",
+      "profiles": ["v15_hf_production", "v16_hf_production"]
+    },
+    "adaptation_base_v16": {
+      "mode": "pairwise",
+      "profiles": ["base_hf_production_40", "v16_hf_production"]
+    },
+    "production_absolute": {
+      "mode": "absolute",
+      "profiles": ["v16_q5_production_current"]
+    },
+    "repeat_1_0_vs_1_1": {
+      "mode": "pairwise",
+      "profiles": ["v16_q5_repeat_1_0", "v16_q5_repeat_1_1"]
+    },
+    "repeat_1_05_vs_1_1": {
+      "mode": "pairwise",
+      "profiles": ["v16_q5_repeat_1_05", "v16_q5_repeat_1_1"]
+    },
+    "repeat_1_2_vs_1_1": {
+      "mode": "pairwise",
+      "profiles": ["v16_q5_repeat_1_2", "v16_q5_repeat_1_1"]
+    },
+    "vision_absolute": {
+      "mode": "absolute",
+      "profiles": ["v16_q5_vision"]
+    },
+    "quant_q4_q5": {
+      "mode": "pairwise",
+      "profiles": ["v16_q4_benchmark", "v16_q5_benchmark"]
+    }
+  }
+}

@@ -58,9 +58,10 @@ __pycache__/
 .claude/
 *.code-workspace
 
-# Portfolio (separate workspace if exists)
-portfolio/
-itmo_portfolio_businessgpt.*
+# Private evaluation runs and application workspace
+/eval_runs/
+/*folio/
+/itmo_*.*
 
 # Kaggle config (contains API token)
 .kaggle/

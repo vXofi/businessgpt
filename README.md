@@ -32,10 +32,12 @@ mental model.
 | `SCRIPT_GUIDE.md` | Commands for distillation, preference data, reward ranking, and export. |
 | `PLAN.md` | Retrospective history of older model versions. |
 | `docs/FAILURE_TRACKING.md` | Private failure-log tags and record shape. |
+| `docs/TELEGRAM_EXPORTS.md` | Import Telegram Desktop HTML for private evaluation. |
 | `notebooks/training.ipynb` | SFT training notebook. |
 | `notebooks/eval_only.ipynb` | Candidate generation notebook. |
 | `notebooks/local/businessgpt_bench.ipynb` | Manual eval, labeling, and best-of-N review UI. |
 | `notebooks/reward_model.ipynb` | RuBERT reward model training. |
+| `notebooks/model_eval.ipynb` | Kaggle Save & Run wrapper for HF baseline generation. |
 | `notebooks/orpo.ipynb` | Parked ORPO research path. |
 | `merge_and_push.py` | HF model/adapter merge, GGUF conversion, quantization, and push. |
 | `eval/` | Data/eval utility scripts. |
@@ -82,6 +84,12 @@ GGUF_QUANTS=Q5_K_M,Q4_K_M python3 merge_and_push.py
 ```
 
 Script details live in `SCRIPT_GUIDE.md`.
+
+Model baseline evaluation:
+
+```bash
+python -m eval.model_eval --help
+```
 
 ## Privacy Rules
 

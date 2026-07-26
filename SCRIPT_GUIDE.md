@@ -12,9 +12,51 @@ Operational notes for local scripts. Private/generated files are gitignored. Kee
 | `eval/rank_with_rm.py` | Re-rank multi-candidate generations with the reward model |
 | `eval/purge_hf_private_eval.py` | Delete accidentally uploaded private eval artifacts from HF model repos |
 | `eval/scan_bot_patterns.py` | Find repeated bot-like patterns in raw Telegram export |
+| `python -m eval.model_eval import-telegram` | Normalize Telegram Desktop HTML exports and find private timeline anchors |
+| `python -m eval.model_eval` | Out-of-time dataset, generation, blind review, metrics, and VM workload |
 | `eval/filter_train_gay_spam.py` | Legacy cleanup for `I am N% gay` target spam |
 | `merge_and_push.py` | Edit config, merge LoRA, convert/quantize GGUF, push to HF |
 | `scripts/legacy/test_gemma_e2b_q4.py` | Old CPU RAM/speed sanity check for Gemma E2B |
+
+## Model Baseline Evaluation
+
+The v16 ML/MLSD evaluation is manifest-driven:
+
+```bash
+python -m eval.model_eval --help
+```
+
+The experiment matrix lives in `eval/experiments/v16_baseline.json`. All
+datasets, generations, ratings, reports, and runbooks belong below the ignored
+`eval_runs/` directory.
+
+Telegram Desktop HTML exports can be normalized before evaluation:
+
+```bash
+python -m eval.model_eval import-telegram \
+  --export /private/telegram-export \
+  --output eval_runs/imports/chat.json \
+  --anchors eval_runs/imports/chat.anchors.json \
+  --anchor-config eval_runs/imports/chat.config.json
+```
+
+See `docs/TELEGRAM_EXPORTS.md` for the private anchor-config format and direct
+HTML dataset builds.
+
+`notebooks/model_eval.ipynb` runs one fixed HF profile per Kaggle Save & Run.
+For the v16 baseline, generate:
+
+```text
+v15_hf_production       # 64 rows
+v16_hf_production       # 64 rows
+base_hf_production_40   # 40 rows
+```
+
+The base profile shares its ordered subset and seeds with full v16, so the
+adaptation comparison reuses matching `v16_hf_production` rows. The final
+notebook cell rejects missing, duplicate, empty, failed, or provenance-mismatched
+records. Each Save & Run is self-contained; checkpoint files are not expected
+to survive into a later run.
 
 ## Distillation
 
@@ -316,12 +358,18 @@ v11-v13 comparisons.
 
 ## Reward Model Re-Ranking
 
-After `notebooks/eval_only.ipynb` writes `eval/generations_v16_multi.json` and `notebooks/reward_model.ipynb` pushes the RM:
+`notebooks/reward_model.ipynb` validates and splits preference pairs by prompt
+group, trains the RuBERT ranker, and always saves a local Kaggle artifact plus
+`eval_metrics.json`. Hugging Face publication is disabled by default. Publish a
+new versioned repository only after the offline gate passes.
+
+After a passing candidate is published and `notebooks/eval_only.ipynb` writes
+`eval/generations_v16_multi.json`:
 
 ```bash
 python3 eval/rank_with_rm.py \
   --version v16 \
-  --rm-repo vXofi/businessgpt-reward-rubert
+  --rm-repo vXofi/businessgpt-reward-rubert-v16-grouped-r1
 ```
 
 Output:

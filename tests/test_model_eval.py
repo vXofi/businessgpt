@@ -14,6 +14,7 @@ from eval.model_eval.common import (
     append_jsonl,
     deterministic_seed,
     profile_config,
+    resolve_json_dataset_path,
     sha256_json,
     write_json,
 )
@@ -715,6 +716,24 @@ class ModelEvalStatisticsTests(unittest.TestCase):
 
 
 class ModelEvalCommonTests(unittest.TestCase):
+    def test_dataset_path_resolves_changed_kaggle_slug_by_dataset_id(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            actual = root / "different-kaggle-slug" / "nested" / "temporal_eval.json"
+            actual.parent.mkdir(parents=True)
+            write_json(actual, {"dataset_id": "frozen-dataset"})
+            stale = root / "stale" / "temporal_eval.json"
+            stale.parent.mkdir()
+            write_json(stale, {"dataset_id": "old-dataset"})
+
+            resolved = resolve_json_dataset_path(
+                root / "assumed-slug" / "temporal_eval.json",
+                search_root=root,
+                expected_dataset_id="frozen-dataset",
+            )
+
+            self.assertEqual(resolved, actual)
+
     def test_generation_artifact_validation_is_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

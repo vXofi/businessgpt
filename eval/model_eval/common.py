@@ -55,6 +55,63 @@ def load_json(path: str | Path) -> Any:
         return json.load(source)
 
 
+def resolve_json_dataset_path(
+    preferred_path: str | Path,
+    *,
+    search_root: str | Path,
+    expected_dataset_id: str,
+) -> Path:
+    preferred = Path(preferred_path)
+    candidates: list[Path] = []
+    if preferred.is_file():
+        candidates.append(preferred)
+    root = Path(search_root)
+    if root.is_dir():
+        candidates.extend(sorted(root.rglob(preferred.name)))
+
+    unique: list[Path] = []
+    seen: set[Path] = set()
+    for candidate in candidates:
+        resolved = candidate.resolve()
+        if resolved not in seen:
+            unique.append(candidate)
+            seen.add(resolved)
+
+    inspected: list[tuple[Path, object]] = []
+    matches: list[Path] = []
+    for candidate in unique:
+        try:
+            value = load_json(candidate)
+        except (OSError, ValueError, json.JSONDecodeError):
+            inspected.append((candidate, "unreadable"))
+            continue
+        dataset_id = value.get("dataset_id") if isinstance(value, dict) else None
+        inspected.append((candidate, dataset_id))
+        if dataset_id == expected_dataset_id:
+            matches.append(candidate)
+
+    if matches:
+        return min(
+            matches,
+            key=lambda path: (
+                path.resolve() != preferred.resolve(),
+                len(path.parts),
+                str(path),
+            ),
+        )
+
+    details = ", ".join(
+        f"{path} (dataset_id={dataset_id!r})"
+        for path, dataset_id in inspected
+    )
+    if not details:
+        details = f"no files named {preferred.name!r} found"
+    raise FileNotFoundError(
+        f"Could not find dataset_id={expected_dataset_id!r}. "
+        f"Preferred path: {preferred}. Searched: {root}. Candidates: {details}"
+    )
+
+
 def write_json(path: str | Path, value: Any) -> None:
     output = Path(path)
     output.parent.mkdir(parents=True, exist_ok=True)

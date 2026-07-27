@@ -59,6 +59,12 @@ def validate_generation_output(
     seen: set[str] = set()
     errors: list[str] = []
     expected_provenance = profile.get("model")
+
+    def comparable_provenance(value: Any) -> Any:
+        if not isinstance(value, dict):
+            return value
+        return {key: item for key, item in value.items() if item is not None}
+
     for index, record in enumerate(records, 1):
         prompt_id = record.get("prompt_id")
         label = f"row {index}" if not prompt_id else f"prompt {prompt_id}"
@@ -97,7 +103,9 @@ def validate_generation_output(
 
         if expected_provenance is not None:
             actual_provenance = record.get("model_provenance")
-            if actual_provenance != expected_provenance:
+            if comparable_provenance(actual_provenance) != comparable_provenance(
+                expected_provenance
+            ):
                 errors.append(
                     f"{label}: model_provenance={actual_provenance!r}, "
                     f"expected {expected_provenance!r}"

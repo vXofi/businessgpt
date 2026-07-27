@@ -740,8 +740,11 @@ class ModelEvalCommonTests(unittest.TestCase):
             model = {
                 "base_repo": "base",
                 "base_revision": "base-sha",
-                "adapter_repo": "adapter",
-                "adapter_revision": "adapter-sha",
+            }
+            generated_model = {
+                **model,
+                "adapter_repo": None,
+                "adapter_revision": None,
             }
             manifest = {
                 "schema_version": 1,
@@ -799,8 +802,8 @@ class ModelEvalCommonTests(unittest.TestCase):
                 "sampling": profile["sampling"],
                 "status": "ok",
                 "response": "answer",
-                "model_provenance": model,
-                "provenance_sha256": sha256_json(model),
+                "model_provenance": generated_model,
+                "provenance_sha256": sha256_json(generated_model),
             }
             append_jsonl(output_path, valid)
 
@@ -813,6 +816,24 @@ class ModelEvalCommonTests(unittest.TestCase):
                 )["successful"],
                 1,
             )
+
+            output_path.write_text("", encoding="utf-8")
+            wrong_model = {**generated_model, "adapter_repo": "wrong-adapter"}
+            append_jsonl(
+                output_path,
+                {
+                    **valid,
+                    "model_provenance": wrong_model,
+                    "provenance_sha256": sha256_json(wrong_model),
+                },
+            )
+            with self.assertRaisesRegex(ValueError, "model_provenance"):
+                validate_generation_output(
+                    manifest_path=manifest_path,
+                    dataset_path=dataset_path,
+                    profile_id="hf",
+                    output_path=output_path,
+                )
 
             output_path.write_text("", encoding="utf-8")
             append_jsonl(output_path, {**valid, "response": "", "status": "error"})

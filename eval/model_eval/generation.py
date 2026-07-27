@@ -441,6 +441,12 @@ def generate_hf(
                 "full reasoning mode requires a chat template that opens but "
                 "does not close the reasoning block"
             )
+    elif reasoning_mode == "disabled":
+        if "<think>" not in assistant_tail or "</think>" not in assistant_tail:
+            raise RuntimeError(
+                "disabled reasoning mode requires a chat template that "
+                "pre-fills a closed reasoning block"
+            )
     print(
         json.dumps(
             {
@@ -587,9 +593,10 @@ def generate_hf(
             stats["failed"] += 1
         append_jsonl(output, record)
         stats["completed"] += 1
+        error_suffix = f" {record['error']}" if record.get("error") else ""
         print(
             f"[{index}/{len(rows)}] {row['id']} {record['status']} "
-            f"{record.get('wall_ms')}ms",
+            f"{record.get('wall_ms')}ms{error_suffix}",
             flush=True,
         )
 

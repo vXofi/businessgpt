@@ -472,18 +472,13 @@ class ModelEvalDatasetTests(unittest.TestCase):
             base_profile["model"]["tokenizer_revision"],
             base_profile["model"]["base_revision"],
         )
-        self.assertEqual(base_profile["sampling_id"], "controlled_reasoning")
-        self.assertEqual(
-            manifest["sampling_profiles"]["controlled_reasoning"]["max_tokens"],
-            4096,
-        )
-        self.assertEqual(base_profile["reasoning_mode"], "full")
+        self.assertEqual(base_profile["sampling_id"], "controlled")
+        self.assertEqual(base_profile["reasoning_mode"], "disabled")
         self.assertEqual(
             base_profile["chat_template_kwargs"],
-            {"enable_thinking": True},
+            {"enable_thinking": False},
         )
         self.assertTrue(base_profile["reject_reasoning_trace"])
-        self.assertTrue(base_profile["require_stop"])
         self.assertEqual(
             manifest["comparisons"]["adaptation_base_v16"]["profiles"],
             ["base_hf_production_40", "v16_hf_production"],

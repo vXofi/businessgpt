@@ -14,13 +14,6 @@
       "top_k": 50,
       "repetition_penalty": 1.1
     },
-    "controlled_reasoning": {
-      "max_tokens": 4096,
-      "temperature": 0.9,
-      "top_p": 0.9,
-      "top_k": 50,
-      "repetition_penalty": 1.1
-    },
     "production_current": {
       "max_tokens": 256,
       "temperature": 0.9,
@@ -106,15 +99,14 @@
     "base_hf_production_40": {
       "backend": "hf",
       "prompt_id": "production",
-      "sampling_id": "controlled_reasoning",
+      "sampling_id": "controlled",
       "dataset_split": "text",
       "subset_id": "main_text",
       "limit": 40,
       "reject_reasoning_trace": true,
-      "require_stop": true,
-      "reasoning_mode": "full",
+      "reasoning_mode": "disabled",
       "chat_template_kwargs": {
-        "enable_thinking": true
+        "enable_thinking": false
       },
       "model": {
         "base_repo": "huihui-ai/Huihui-Qwen3.5-9B-abliterated",

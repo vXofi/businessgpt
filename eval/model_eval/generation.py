@@ -47,6 +47,20 @@ def _has_visible_reasoning_trace(response: str) -> bool:
     return normalized.startswith(("<think>", "thinking process:"))
 
 
+def _extract_final_response(
+    raw_response: str,
+    *,
+    reasoning_mode: str,
+) -> tuple[str, str | None]:
+    if reasoning_mode != "full":
+        return clean_response(raw_response), None
+    closing_tag = "</think>"
+    if closing_tag not in raw_response:
+        raise ValueError("reasoning did not finish within the generation budget")
+    reasoning, answer = raw_response.split(closing_tag, 1)
+    return clean_response(answer), reasoning
+
+
 def validate_generation_output(
     *,
     manifest_path: str | Path,
@@ -91,6 +105,9 @@ def validate_generation_output(
             "sampling_name": profile["sampling_id"],
             "sampling": profile["sampling"],
         }
+        for optional_field in ("reasoning_mode", "chat_template_kwargs"):
+            if optional_field in profile:
+                checks[optional_field] = profile[optional_field]
         for field, expected_value in checks.items():
             if record.get(field) != expected_value:
                 errors.append(
@@ -109,6 +126,17 @@ def validate_generation_output(
             response
         ):
             errors.append(f"{label}: response contains a visible reasoning trace")
+        usage = record.get("usage") or {}
+        if profile.get("require_stop") and usage.get("finish_reason") != "stop":
+            errors.append(
+                f"{label}: finish_reason={usage.get('finish_reason')!r}, "
+                "expected 'stop'"
+            )
+        if profile.get("reasoning_mode") == "full":
+            if int(usage.get("reasoning_tokens") or 0) <= 0:
+                errors.append(f"{label}: full reasoning token count is missing")
+            if int(usage.get("answer_tokens") or 0) <= 0:
+                errors.append(f"{label}: final answer token count is missing")
 
         if expected_provenance is not None:
             actual_provenance = record.get("model_provenance")
@@ -195,7 +223,7 @@ def _base_record(
     row: dict[str, Any],
     seed: int,
 ) -> dict[str, Any]:
-    return {
+    record = {
         "schema_version": 1,
         "experiment_id": manifest["experiment_id"],
         "dataset_id": dataset["dataset_id"],
@@ -212,6 +240,10 @@ def _base_record(
         "seed": seed,
         "generated_at": datetime.now().astimezone().isoformat(),
     }
+    for optional_field in ("reasoning_mode", "chat_template_kwargs"):
+        if optional_field in profile:
+            record[optional_field] = profile[optional_field]
+    return record
 
 
 def generate_api(
@@ -389,6 +421,37 @@ def generate_hf(
         flush=True,
     )
 
+    tokenizer = AutoTokenizer.from_pretrained(
+        tokenizer_repo,
+        revision=tokenizer_revision,
+        trust_remote_code=True,
+    )
+    chat_template_kwargs = dict(profile.get("chat_template_kwargs") or {})
+    reasoning_mode = str(profile.get("reasoning_mode") or "direct")
+    template_probe = tokenizer.apply_chat_template(
+        [{"role": "user", "content": "template probe"}],
+        tokenize=False,
+        add_generation_prompt=True,
+        **chat_template_kwargs,
+    )
+    assistant_tail = template_probe.rsplit("<|im_start|>assistant\n", 1)[-1]
+    if reasoning_mode == "full":
+        if "<think>" not in assistant_tail or "</think>" in assistant_tail:
+            raise RuntimeError(
+                "full reasoning mode requires a chat template that opens but "
+                "does not close the reasoning block"
+            )
+    print(
+        json.dumps(
+            {
+                "reasoning_mode": reasoning_mode,
+                "chat_template_kwargs": chat_template_kwargs,
+                "assistant_template_tail": assistant_tail,
+            },
+            indent=2,
+        ),
+        flush=True,
+    )
     model = AutoModelForCausalLM.from_pretrained(
         base_repo,
         revision=base_revision,
@@ -404,11 +467,6 @@ def generate_hf(
             revision=adapter_revision,
         )
     model.eval()
-    tokenizer = AutoTokenizer.from_pretrained(
-        tokenizer_repo,
-        revision=tokenizer_revision,
-        trust_remote_code=True,
-    )
     input_device = next(model.parameters()).device
     rows = dataset_rows(dataset, profile, manifest["seed_salt"])
     output = Path(output_path)
@@ -449,6 +507,7 @@ def generate_hf(
                 messages,
                 tokenize=False,
                 add_generation_prompt=True,
+                **chat_template_kwargs,
             )
             inputs = tokenizer(
                 rendered,
@@ -472,10 +531,38 @@ def generate_hf(
                     eos_token_id=tokenizer.eos_token_id,
                 )
             generated_ids = output_tokens[0, inputs["input_ids"].shape[1] :]
-            response = clean_response(
-                tokenizer.decode(generated_ids, skip_special_tokens=False)
+            raw_response = tokenizer.decode(
+                generated_ids,
+                skip_special_tokens=False,
+            )
+            response, reasoning = _extract_final_response(
+                raw_response,
+                reasoning_mode=reasoning_mode,
             )
             hit_limit = len(generated_ids) >= int(sampling["max_tokens"])
+            reasoning_tokens = 0
+            if reasoning is not None:
+                generated_token_ids = generated_ids.tolist()
+                closing_tag_ids = tokenizer.encode(
+                    "</think>",
+                    add_special_tokens=False,
+                )
+                reasoning_tokens = next(
+                    (
+                        index + len(closing_tag_ids)
+                        for index in range(
+                            len(generated_token_ids) - len(closing_tag_ids) + 1
+                        )
+                        if generated_token_ids[
+                            index : index + len(closing_tag_ids)
+                        ] == closing_tag_ids
+                    ),
+                    0,
+                )
+                if reasoning_tokens == 0:
+                    raise ValueError(
+                        "reasoning closed in decoded text but not in token sequence"
+                    )
             record.update(
                 status="ok",
                 response=response,
@@ -483,6 +570,8 @@ def generate_hf(
                 usage={
                     "prompt_tokens": int(inputs["input_ids"].shape[1]),
                     "completion_tokens": int(len(generated_ids)),
+                    "reasoning_tokens": int(reasoning_tokens),
+                    "answer_tokens": int(len(generated_ids) - reasoning_tokens),
                     "total_tokens": int(inputs["input_ids"].shape[1] + len(generated_ids)),
                     "finish_reason": "length" if hit_limit else "stop",
                     "seed": seed,

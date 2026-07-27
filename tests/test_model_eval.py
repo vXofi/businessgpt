@@ -25,6 +25,7 @@ from eval.model_eval.dataset import (
     select_records,
 )
 from eval.model_eval.generation import (
+    _extract_final_response,
     dataset_rows,
     export_benchmark_workload,
     split_benchmark_generations,
@@ -462,17 +463,27 @@ class ModelEvalDatasetTests(unittest.TestCase):
             manifest["profiles"]["v16_hf_production"]["subset_id"],
         )
         base_profile = manifest["profiles"]["base_hf_production_40"]
-        v16_model = manifest["profiles"]["v16_hf_production"]["model"]
         self.assertNotIn("adapter_repo", base_profile["model"])
         self.assertEqual(
             base_profile["model"]["tokenizer_repo"],
-            v16_model["adapter_repo"],
+            base_profile["model"]["base_repo"],
         )
         self.assertEqual(
             base_profile["model"]["tokenizer_revision"],
-            v16_model["adapter_revision"],
+            base_profile["model"]["base_revision"],
+        )
+        self.assertEqual(base_profile["sampling_id"], "controlled_reasoning")
+        self.assertEqual(
+            manifest["sampling_profiles"]["controlled_reasoning"]["max_tokens"],
+            4096,
+        )
+        self.assertEqual(base_profile["reasoning_mode"], "full")
+        self.assertEqual(
+            base_profile["chat_template_kwargs"],
+            {"enable_thinking": True},
         )
         self.assertTrue(base_profile["reject_reasoning_trace"])
+        self.assertTrue(base_profile["require_stop"])
         self.assertEqual(
             manifest["comparisons"]["adaptation_base_v16"]["profiles"],
             ["base_hf_production_40", "v16_hf_production"],
@@ -728,6 +739,19 @@ class ModelEvalStatisticsTests(unittest.TestCase):
 
 
 class ModelEvalCommonTests(unittest.TestCase):
+    def test_full_reasoning_is_removed_only_after_it_closes(self) -> None:
+        response, reasoning = _extract_final_response(
+            "analysis here</think>\n\nfinal answer<|im_end|>",
+            reasoning_mode="full",
+        )
+        self.assertEqual(response, "final answer")
+        self.assertEqual(reasoning, "analysis here")
+        with self.assertRaisesRegex(ValueError, "reasoning did not finish"):
+            _extract_final_response(
+                "unfinished analysis",
+                reasoning_mode="full",
+            )
+
     def test_dataset_path_resolves_changed_kaggle_slug_by_dataset_id(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

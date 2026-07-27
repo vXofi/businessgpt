@@ -103,9 +103,12 @@
       "dataset_split": "text",
       "subset_id": "main_text",
       "limit": 40,
+      "reject_reasoning_trace": true,
       "model": {
         "base_repo": "huihui-ai/Huihui-Qwen3.5-9B-abliterated",
-        "base_revision": "05b9e7c9b978ba29bdb8f50a49c30e4b91183339"
+        "base_revision": "05b9e7c9b978ba29bdb8f50a49c30e4b91183339",
+        "tokenizer_repo": "vXofi/businessgpt-v16-qwen3.5-9b",
+        "tokenizer_revision": "53bb68c8e45610ed31d6fbbfc3e713ca9472444d"
       }
     },
     "v16_q5_repeat_1_0": {

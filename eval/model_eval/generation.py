@@ -42,6 +42,11 @@ def dataset_rows(dataset: dict[str, Any], profile: dict[str, Any], seed_salt: st
     return rows
 
 
+def _has_visible_reasoning_trace(response: str) -> bool:
+    normalized = response.lstrip().casefold()
+    return normalized.startswith(("<think>", "thinking process:"))
+
+
 def validate_generation_output(
     *,
     manifest_path: str | Path,
@@ -100,6 +105,10 @@ def validate_generation_output(
         response = record.get("response")
         if not isinstance(response, str) or not response.strip():
             errors.append(f"{label}: response is empty")
+        elif profile.get("reject_reasoning_trace") and _has_visible_reasoning_trace(
+            response
+        ):
+            errors.append(f"{label}: response contains a visible reasoning trace")
 
         if expected_provenance is not None:
             actual_provenance = record.get("model_provenance")
@@ -355,8 +364,15 @@ def generate_hf(
         if adapter_repo
         else None
     )
-    tokenizer_repo = adapter_repo or base_repo
-    tokenizer_revision = adapter_revision or base_revision
+    configured_tokenizer_repo = model_config.get("tokenizer_repo")
+    tokenizer_repo = configured_tokenizer_repo or adapter_repo or base_repo
+    if configured_tokenizer_repo:
+        tokenizer_revision = _resolve_hf_revision(
+            tokenizer_repo,
+            model_config.get("tokenizer_revision"),
+        )
+    else:
+        tokenizer_revision = adapter_revision or base_revision
     print(
         json.dumps(
             {
@@ -365,6 +381,8 @@ def generate_hf(
                 "base_revision": base_revision,
                 "adapter_repo": adapter_repo,
                 "adapter_revision": adapter_revision,
+                "tokenizer_repo": tokenizer_repo,
+                "tokenizer_revision": tokenizer_revision,
             },
             indent=2,
         ),
@@ -419,6 +437,11 @@ def generate_hf(
             "adapter_repo": adapter_repo,
             "adapter_revision": adapter_revision,
         }
+        if configured_tokenizer_repo:
+            record["model_provenance"].update(
+                tokenizer_repo=tokenizer_repo,
+                tokenizer_revision=tokenizer_revision,
+            )
         started = time.perf_counter()
         try:
             messages = _hf_messages(row, profile["prompt_text"])

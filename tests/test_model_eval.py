@@ -461,6 +461,18 @@ class ModelEvalDatasetTests(unittest.TestCase):
             manifest["profiles"]["base_hf_production_40"]["subset_id"],
             manifest["profiles"]["v16_hf_production"]["subset_id"],
         )
+        base_profile = manifest["profiles"]["base_hf_production_40"]
+        v16_model = manifest["profiles"]["v16_hf_production"]["model"]
+        self.assertNotIn("adapter_repo", base_profile["model"])
+        self.assertEqual(
+            base_profile["model"]["tokenizer_repo"],
+            v16_model["adapter_repo"],
+        )
+        self.assertEqual(
+            base_profile["model"]["tokenizer_revision"],
+            v16_model["adapter_revision"],
+        )
+        self.assertTrue(base_profile["reject_reasoning_trace"])
         self.assertEqual(
             manifest["comparisons"]["adaptation_base_v16"]["profiles"],
             ["base_hf_production_40", "v16_hf_production"],
@@ -828,6 +840,21 @@ class ModelEvalCommonTests(unittest.TestCase):
                 },
             )
             with self.assertRaisesRegex(ValueError, "model_provenance"):
+                validate_generation_output(
+                    manifest_path=manifest_path,
+                    dataset_path=dataset_path,
+                    profile_id="hf",
+                    output_path=output_path,
+                )
+
+            manifest["profiles"]["hf"]["reject_reasoning_trace"] = True
+            write_json(manifest_path, manifest)
+            output_path.write_text("", encoding="utf-8")
+            append_jsonl(
+                output_path,
+                {**valid, "response": "Thinking Process:\\nAnalyze the request"},
+            )
+            with self.assertRaisesRegex(ValueError, "visible reasoning trace"):
                 validate_generation_output(
                     manifest_path=manifest_path,
                     dataset_path=dataset_path,

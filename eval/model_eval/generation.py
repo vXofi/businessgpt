@@ -246,6 +246,36 @@ def _base_record(
     return record
 
 
+def _prepare_resume_output(output: Path) -> set[str]:
+    if not output.is_file():
+        return set()
+
+    existing = read_jsonl(output)
+    successful: list[dict[str, Any]] = []
+    done: set[str] = set()
+    for row in existing:
+        if row.get("status") != "ok":
+            continue
+        prompt_id = str(row["prompt_id"])
+        if prompt_id in done:
+            raise ValueError(f"{output}: duplicate successful prompt_id {prompt_id}")
+        successful.append(row)
+        done.add(prompt_id)
+
+    if len(successful) != len(existing):
+        temporary = output.with_suffix(output.suffix + ".tmp")
+        temporary.write_text(
+            "".join(f"{canonical_json(row)}\n" for row in successful),
+            encoding="utf-8",
+        )
+        temporary.replace(output)
+        print(
+            f"Removed {len(existing) - len(successful)} failed row(s) before resume.",
+            flush=True,
+        )
+    return done
+
+
 def generate_api(
     *,
     manifest_path: str | Path,
@@ -264,8 +294,7 @@ def generate_api(
         raise ValueError(f"{profile_id} is not an API profile")
     rows = dataset_rows(dataset, profile, manifest["seed_salt"])
     output = Path(output_path)
-    existing = read_jsonl(output) if output.is_file() else []
-    done = {row["prompt_id"] for row in existing}
+    done = _prepare_resume_output(output)
     stats = {"selected": len(rows), "completed": len(done), "failed": 0}
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -476,8 +505,7 @@ def generate_hf(
     input_device = next(model.parameters()).device
     rows = dataset_rows(dataset, profile, manifest["seed_salt"])
     output = Path(output_path)
-    existing = read_jsonl(output) if output.is_file() else []
-    done = {row["prompt_id"] for row in existing}
+    done = _prepare_resume_output(output)
     stats = {"selected": len(rows), "completed": len(done), "failed": 0}
 
     for index, row in enumerate(rows, 1):

@@ -172,6 +172,15 @@ def _generation_metrics(
     }
 
 
+def _numeric_summary(values: list[float]) -> dict[str, float | None]:
+    return {
+        "mean": statistics.fmean(values) if values else None,
+        "median": statistics.median(values) if values else None,
+        "p95": percentile(values, 0.95),
+        "max": max(values) if values else None,
+    }
+
+
 def analyze_comparison(
     *,
     manifest_path: str | Path,
@@ -302,6 +311,106 @@ def analyze_comparison(
             tag for row in primary for tag in (row.get("failure_tags") or [])
         )
         result["absolute_quality"] = dict(qualities)
+        good_scores: list[tuple[str, float]] = []
+        usable_scores: list[tuple[str, float]] = []
+        per_category: dict[str, Counter[str]] = defaultdict(Counter)
+        by_quality: dict[str, dict[str, list[float]]] = defaultdict(
+            lambda: {
+                "response_characters": [],
+                "completion_tokens": [],
+                "wall_ms": [],
+            }
+        )
+        profile_id = profiles[0]
+        for rating in primary:
+            prompt_id = rating["prompt_id"]
+            source = dataset_rows.get(prompt_id, {})
+            session_id = str(source.get("session_id", prompt_id))
+            quality = str(rating.get("quality") or rating.get("decision"))
+            good_scores.append((session_id, float(quality == "good")))
+            usable_scores.append(
+                (session_id, float(quality in {"good", "acceptable"}))
+            )
+            per_category[str(source.get("category", "unknown"))][quality] += 1
+
+            generation = generations[profile_id].get(prompt_id, {})
+            response = generation.get("response")
+            if isinstance(response, str):
+                by_quality[quality]["response_characters"].append(
+                    float(len(response))
+                )
+            completion_tokens = (generation.get("usage") or {}).get(
+                "completion_tokens"
+            )
+            if isinstance(completion_tokens, (int, float)):
+                by_quality[quality]["completion_tokens"].append(
+                    float(completion_tokens)
+                )
+            wall_ms = generation.get("wall_ms")
+            if isinstance(wall_ms, (int, float)):
+                by_quality[quality]["wall_ms"].append(float(wall_ms))
+
+        total = len(primary)
+        good_count = qualities.get("good", 0)
+        usable_count = good_count + qualities.get("acceptable", 0)
+        bad_count = qualities.get("bad", 0)
+        result["absolute_quality_metrics"] = {
+            "good": {
+                "count": good_count,
+                "rate": good_count / total if total else None,
+                "wilson_ci95": list(wilson_interval(good_count, total)),
+                "session_cluster_ci95": list(
+                    cluster_bootstrap(
+                        good_scores,
+                        iterations=bootstrap_iterations,
+                    )
+                ),
+            },
+            "usable": {
+                "count": usable_count,
+                "rate": usable_count / total if total else None,
+                "wilson_ci95": list(wilson_interval(usable_count, total)),
+                "session_cluster_ci95": list(
+                    cluster_bootstrap(
+                        usable_scores,
+                        iterations=bootstrap_iterations,
+                    )
+                ),
+            },
+            "bad": {
+                "count": bad_count,
+                "rate": bad_count / total if total else None,
+                "wilson_ci95": list(wilson_interval(bad_count, total)),
+            },
+            "per_category": {
+                category: {
+                    "rated_count": sum(counts.values()),
+                    "counts": dict(counts),
+                    "good_rate": (
+                        counts.get("good", 0) / sum(counts.values())
+                        if counts
+                        else None
+                    ),
+                    "usable_rate": (
+                        (
+                            counts.get("good", 0)
+                            + counts.get("acceptable", 0)
+                        )
+                        / sum(counts.values())
+                        if counts
+                        else None
+                    ),
+                }
+                for category, counts in sorted(per_category.items())
+            },
+            "by_quality": {
+                quality: {
+                    metric: _numeric_summary(values)
+                    for metric, values in metrics.items()
+                }
+                for quality, metrics in sorted(by_quality.items())
+            },
+        }
         result["human_failures"] = {
             tag: {
                 "count": count,
@@ -388,6 +497,32 @@ def write_summary_files(
         lines.append(
             f"Absolute quality: `{json.dumps(result.get('absolute_quality', {}), sort_keys=True)}`"
         )
+        metrics = result.get("absolute_quality_metrics") or {}
+        for label in ("good", "usable", "bad"):
+            values = metrics.get(label) or {}
+            rate = values.get("rate")
+            ci = values.get("session_cluster_ci95") or values.get("wilson_ci95")
+            if rate is None:
+                continue
+            lines.append(
+                f"{label.title()} rate: {rate:.3f} "
+                f"(95% CI [{ci[0]:.3f}, {ci[1]:.3f}])"
+            )
+        categories = metrics.get("per_category") or {}
+        if categories:
+            lines.extend(
+                [
+                    "",
+                    "| Category | Rated | Good | Usable |",
+                    "|---|---:|---:|---:|",
+                ]
+            )
+            for category, values in categories.items():
+                lines.append(
+                    f"| {category} | {values['rated_count']} | "
+                    f"{values['good_rate']:.3f} | "
+                    f"{values['usable_rate']:.3f} |"
+                )
     (output / f"{stem}.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     try:

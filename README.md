@@ -14,6 +14,12 @@ deployment live in the sibling repo:
 
 - Current deployed baseline: v16 SFT, 9B Qwen3.5 abliterated line.
 - Serving artifact: GGUF, with Q5_K_M as the practical production quant.
+- The v16 text baseline is complete: fine-tuning clearly improves target-style
+  adaptation over the base model, while v15 remains directionally preferred
+  to v16 in a direct comparison.
+- The deployed text configuration was rated usable on 88.4% of the absolute
+  production audit. See `docs/EVALUATION_RESULTS.md` for the public-safe
+  methodology, confidence intervals, and limitations.
 - ORPO: attempted, parked, not shippable.
 - Reward model: trained; next useful quality experiment is offline best-of-N
   reranking before any server integration.
@@ -31,6 +37,7 @@ mental model.
 | `REPO_NOTES.md` | Repo mental model and important lessons. |
 | `SCRIPT_GUIDE.md` | Commands for distillation, preference data, reward ranking, and export. |
 | `PLAN.md` | Retrospective history of older model versions. |
+| `docs/EVALUATION_RESULTS.md` | Public-safe v16 text evaluation results and limitations. |
 | `docs/FAILURE_TRACKING.md` | Private failure-log tags and record shape. |
 | `docs/TELEGRAM_EXPORTS.md` | Import Telegram Desktop HTML for private evaluation. |
 | `notebooks/training.ipynb` | SFT training notebook. |

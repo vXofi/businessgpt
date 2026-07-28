@@ -11,6 +11,13 @@ As of July 2026, the active baseline is v16 SFT:
   `../hugeballs-server` repo.
 - The production shape is a 9B Qwen3.5 abliterated LoRA merged/exported to GGUF,
   with Q5_K_M as the practical serving quant.
+- The v16 text baseline is frozen and documented in
+  `docs/EVALUATION_RESULTS.md`. Fine-tuning clearly adapts the base model, the
+  current production configuration is usable on 88.4% of the absolute audit,
+  and v15 remains directionally preferred to v16.
+- The production system prompt is directionally preferred to the legacy prompt,
+  but the measured interval includes parity. It is retained without claiming a
+  conclusive win.
 - API/deployment code no longer lives here. This repo owns training, eval,
   distillation, preference data, reward model tooling, and GGUF export.
 - The recent runtime repetition issue appears mostly fixed by moving the bot
@@ -24,40 +31,34 @@ As of July 2026, the active baseline is v16 SFT:
 
 ## Active Backlog
 
-### 1. Verify Runtime Input Format
+### 1. Define And Evaluate v17
 
-Confirm the Telegram bot sends either the structured `messages` request or an
-equivalent role-aware format to the server:
+Use the frozen v16 results to target the measured failure modes:
 
-```json
-{
-  "messages": [
-    {"role": "user", "name": "xofi", "content": "text"},
-    {"role": "assistant", "content": "previous bot answer"},
-    {"role": "user", "name": "xofi", "content": "next text"}
-  ],
-  "max_tokens": 128,
-  "temperature": 0.9,
-  "repetition_penalty": 1.2
-}
-```
+- improve last-relevant-turn selection;
+- suppress unrelated continuation and assistant-like formatted insertions;
+- improve wording coherence;
+- preserve concise conversational behavior and v16's multiple-topic strength.
 
-If repetition returns, use `eval/validate_runtime_context.py` against captured
-dialogs before changing training data.
+Do not train on the exact baseline prompts. Build a fresh targeted training
+augment and reserve a newer, session-disjoint temporal holdout for the promotion
+decision. Keep v16 unless v17 improves the target failures without a material
+aggregate or category regression.
 
-### 2. Build A Small Failure Set
+### 2. Add A Multi-Turn Chat Benchmark
 
-Collect real deployed failures before spending Kaggle time:
+The completed baseline evaluates fixed contexts. Add controlled 8-15 turn
+conversations to measure:
 
-- repetition / echoing old bot messages;
-- dead short answers;
-- observer/reviewer behavior instead of chat participant behavior;
-- memorized private phrases;
-- unwanted artifact phrases such as the old gay-spam family;
-- any new one-off pattern that appears more than once.
+- repetition of prior bot answers;
+- return to an old thread;
+- loss of participant identity;
+- coherence and wording degradation;
+- response to topic changes.
 
-Store private examples outside git, preferably in the `businessgpt-eval` Kaggle
-dataset. Use `docs/FAILURE_TRACKING.md` for tags and the private record shape.
+Keep runtime input role-aware. If repetition returns in production, validate
+the captured request with `eval/validate_runtime_context.py` before changing
+training data.
 
 ### 3. Evaluate Reward-Model Best-Of-N
 
@@ -81,20 +82,26 @@ Gate for moving RM into production:
 
 If it passes, integrate best-of-N in `../hugeballs-server`, not this repo.
 
-### 4. Decide Whether To Retrain
+### 4. Complete ML Systems Validation
 
-Do not start another Kaggle training run just because a few bugs exist. Retrain
-only if the failure set shows a pattern that inference formatting and RM
-reranking do not fix.
+Run this in `../hugeballs-server`:
 
-Likely retrain inputs:
+- latency, throughput, memory, and timeout rate at concurrency 1, 2, and 4;
+- API-to-inference timeout and overload behavior;
+- health, readiness, restart, and recovery after terminating the inference
+  process;
+- an end-to-end Telegram-to-model contract test with structured messages.
 
-- fresh chosen-only SFT augment from reviewed v16 outputs;
-- targeted distillation for failure categories;
-- stricter filtering for memorized/private phrases;
-- no stale old manual generations unless they pass current review.
+The existing single-request measurements are descriptive and must not be
+presented as service-level or concurrency evidence.
 
-### 5. Keep ORPO Parked
+### 5. Keep Optional Studies Separate
+
+Vision quality, Q4 versus Q5 quality, and a full repetition-penalty sweep remain
+useful follow-up studies. They do not block the completed text baseline and
+should be run only when their result supports a concrete product decision.
+
+### 6. Keep ORPO Parked
 
 ORPO remains a research branch, not a production path. Revisit only after we
 have enough fresh v16 preference pairs and a narrow reason to believe ORPO will
@@ -109,6 +116,7 @@ solve something RM reranking cannot.
 | v16 SFT | Done | Current deployed baseline. |
 | GGUF export | Done | `merge_and_push.py` defaults to v16 9B Q5/Q4 exports. |
 | Runtime formatting fix | Probably fixed | Repetition reportedly happened only once after the change. |
+| v16 text baseline | Done | Public-safe aggregate report is in `docs/EVALUATION_RESULTS.md`. |
 | ORPO | Parked | Attempted, but output was not acceptable. |
 | Reward model | Done | Use it for offline best-of-N validation next. |
 

@@ -26,6 +26,7 @@ from eval.model_eval.dataset import (
 )
 from eval.model_eval.generation import (
     _extract_final_response,
+    _prepare_resume_output,
     dataset_rows,
     export_benchmark_workload,
     split_benchmark_generations,
@@ -732,6 +733,112 @@ class ModelEvalStatisticsTests(unittest.TestCase):
             self.assertEqual(result["preference"]["counts"]["right_win"], 1)
             self.assertEqual(result["preference"]["left_preference_score"], 0.5)
 
+    def test_absolute_analysis_reports_rates_categories_and_lengths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = {
+                "schema_version": 1,
+                "experiment_id": "test",
+                "seed_salt": "salt",
+                "prompts": {"p": "prompt"},
+                "sampling_profiles": {"s": {"max_tokens": 16}},
+                "profiles": {
+                    "a": {
+                        "backend": "api",
+                        "prompt_id": "p",
+                        "sampling_id": "s",
+                    }
+                },
+                "comparisons": {
+                    "absolute": {"mode": "absolute", "profiles": ["a"]}
+                },
+            }
+            dataset = {
+                "schema_version": 1,
+                "dataset_id": "dataset",
+                "text": [
+                    {
+                        "id": "p1",
+                        "session_id": "s1",
+                        "category": "normal_chat",
+                        "messages": [{"role": "user", "content": "one"}],
+                    },
+                    {
+                        "id": "p2",
+                        "session_id": "s1",
+                        "category": "normal_chat",
+                        "messages": [{"role": "user", "content": "two"}],
+                    },
+                    {
+                        "id": "p3",
+                        "session_id": "s2",
+                        "category": "long_post",
+                        "messages": [{"role": "user", "content": "three"}],
+                    },
+                ],
+                "vision": [],
+            }
+            manifest_path = root / "manifest.json"
+            dataset_path = root / "dataset.json"
+            generation_path = root / "a.jsonl"
+            ratings_path = root / "ratings.jsonl"
+            write_json(manifest_path, manifest)
+            write_json(dataset_path, dataset)
+            for index, prompt_id in enumerate(("p1", "p2", "p3"), 1):
+                append_jsonl(
+                    generation_path,
+                    {
+                        "profile_id": "a",
+                        "prompt_id": prompt_id,
+                        "status": "ok",
+                        "response": "x" * index,
+                        "wall_ms": index * 100,
+                        "usage": {
+                            "completion_tokens": index,
+                            "finish_reason": "stop",
+                        },
+                    },
+                )
+            for prompt_id, quality in (
+                ("p1", "good"),
+                ("p2", "acceptable"),
+                ("p3", "bad"),
+            ):
+                append_jsonl(
+                    ratings_path,
+                    {
+                        "comparison_id": "absolute",
+                        "prompt_id": prompt_id,
+                        "decision": quality,
+                        "quality": quality,
+                        "failure_tags": [],
+                    },
+                )
+
+            result = analyze_comparison(
+                manifest_path=manifest_path,
+                dataset_path=dataset_path,
+                comparison_id="absolute",
+                generation_paths={"a": generation_path},
+                rating_paths=[ratings_path],
+                bootstrap_iterations=100,
+            )
+            metrics = result["absolute_quality_metrics"]
+            self.assertAlmostEqual(metrics["good"]["rate"], 1 / 3)
+            self.assertAlmostEqual(metrics["usable"]["rate"], 2 / 3)
+            self.assertEqual(
+                metrics["per_category"]["normal_chat"]["usable_rate"],
+                1.0,
+            )
+            self.assertEqual(
+                metrics["per_category"]["long_post"]["usable_rate"],
+                0.0,
+            )
+            self.assertEqual(
+                metrics["by_quality"]["bad"]["completion_tokens"]["max"],
+                3.0,
+            )
+
 
 class ModelEvalCommonTests(unittest.TestCase):
     def test_full_reasoning_is_removed_only_after_it_closes(self) -> None:
@@ -905,6 +1012,24 @@ class ModelEvalCommonTests(unittest.TestCase):
             append_jsonl(path, {"profile_id": "a", "prompt_id": "p"})
             with self.assertRaisesRegex(ValueError, "duplicate"):
                 load_generations({"a": path})
+
+    def test_generation_resume_retries_failed_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "rows.jsonl"
+            append_jsonl(
+                path,
+                {"profile_id": "a", "prompt_id": "ok", "status": "ok"},
+            )
+            append_jsonl(
+                path,
+                {"profile_id": "a", "prompt_id": "retry", "status": "error"},
+            )
+
+            self.assertEqual(_prepare_resume_output(path), {"ok"})
+            self.assertEqual(
+                path.read_text(encoding="utf-8").count("\n"),
+                1,
+            )
 
 
 if __name__ == "__main__":

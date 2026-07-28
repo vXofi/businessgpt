@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any, Iterable
@@ -158,6 +159,47 @@ def load_manifest(path: str | Path) -> dict[str, Any]:
     return manifest
 
 
+def _resolve_prompt(prompt_id: str, prompt_spec: Any) -> str:
+    if isinstance(prompt_spec, str):
+        return prompt_spec
+    if not isinstance(prompt_spec, dict):
+        raise ValueError(f"prompt {prompt_id} must be a string or prompt specification")
+
+    expected_hash = str(prompt_spec.get("sha256") or "")
+    if not re.fullmatch(r"[0-9a-f]{64}", expected_hash):
+        raise ValueError(f"prompt {prompt_id} has no valid sha256")
+
+    prompt = os.environ.get(str(prompt_spec.get("env") or ""))
+    if prompt is None:
+        default_prompt_file = (
+            Path(__file__).resolve().parents[2]
+            / "eval_runs"
+            / "config"
+            / "eval_prompts.json"
+        )
+        prompt_file = Path(
+            os.environ.get("BUSINESSGPT_EVAL_PROMPTS_PATH", default_prompt_file)
+        )
+        if prompt_file.is_file():
+            private_prompts = load_json(prompt_file)
+            if isinstance(private_prompts, dict):
+                value = private_prompts.get(prompt_id)
+                if isinstance(value, str):
+                    prompt = value
+
+    if prompt is None:
+        raise ValueError(
+            f"prompt {prompt_id} is redacted from the public manifest; set "
+            f"{prompt_spec.get('env')} or BUSINESSGPT_EVAL_PROMPTS_PATH"
+        )
+    actual_hash = sha256_text(prompt)
+    if actual_hash != expected_hash:
+        raise ValueError(
+            f"prompt {prompt_id} hash mismatch: expected {expected_hash}, got {actual_hash}"
+        )
+    return prompt
+
+
 def profile_config(manifest: dict[str, Any], profile_id: str) -> dict[str, Any]:
     try:
         profile = dict(manifest["profiles"][profile_id])
@@ -166,12 +208,13 @@ def profile_config(manifest: dict[str, Any], profile_id: str) -> dict[str, Any]:
     try:
         prompt_id = profile["prompt_id"]
         sampling_id = profile["sampling_id"]
-        prompt = manifest["prompts"][prompt_id]
+        prompt_spec = manifest["prompts"][prompt_id]
         sampling = manifest["sampling_profiles"][sampling_id]
     except KeyError as exc:
         raise ValueError(
             f"profile {profile_id} references a missing prompt or sampling profile"
         ) from exc
+    prompt = _resolve_prompt(prompt_id, prompt_spec)
     profile.update(
         profile_id=profile_id,
         prompt_id=prompt_id,

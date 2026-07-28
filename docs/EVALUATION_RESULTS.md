@@ -9,19 +9,29 @@ responses, ratings, and source chat exports remain private.
 
 The evaluation answers four questions:
 
-1. Did supervised fine-tuning adapt the base model to the target chat style?
+1. Is the adapted v16 inference artifact preferred to the unadapted base
+   artifact in their intended no-thinking modes?
 2. Did v16 improve over the previous v15 checkpoint?
 3. Does the current production system prompt improve output?
 4. What is the absolute quality of the deployed v16 Q5 configuration?
 
-The primary out-of-time set contains 64 text contexts from 39 source sessions.
-A later post-prompt set contains 43 contexts from 27 sessions. Contexts were
+The primary out-of-time set contains 64 text contexts from 30 source sessions.
+A later post-prompt set contains 43 contexts from 20 sessions. Contexts were
 sampled after the training-data cutoff and were kept out of model training.
 
-Matched comparisons use identical prompts, seeds, and sampling settings.
+Matched comparisons use identical source contexts and deterministic seeds.
+The v15/v16 and prompt comparisons also match their sampling configuration.
+The base comparison is an artifact-level adaptation comparison, not a
+template-identical weight-only ablation: the base uses its native tokenizer
+and official `enable_thinking=False` template, while v16 uses its trained
+artifact template. Both are evaluated in their intended no-thinking inference
+modes with the same 256-token sampling profile.
+
 Sides were blinded during review. Confidence intervals use source-session
 cluster bootstrap resampling where applicable, so repeated contexts from one
-conversation are not treated as fully independent.
+conversation are not treated as fully independent. The current public manifest
+redacts exact operational prompts from the main project surface and records
+their descriptions and SHA-256 hashes instead.
 
 The study used one primary human reviewer. Preference scores count a win as
 1, a tie as 0.5, and a loss as 0.
@@ -30,14 +40,16 @@ The study used one primary human reviewer. Preference scores count a win as
 
 | Comparison | Rated | Result | Session-cluster 95% CI | Interpretation |
 | --- | ---: | ---: | ---: | --- |
-| v16 vs unadapted base | 40 | v16 preference 80.0% | 67.9%-88.9% | Clear target-style adaptation |
+| v16 artifact vs unadapted base artifact | 40 | v16 preference 80.0% | 67.9%-88.9% | Clear artifact-level preference |
 | v15 vs v16 | 64 | v15 preference 61.7% | 49.3%-73.3% | Directional v15 advantage; interval includes parity |
 | Production vs legacy prompt | 43 | production preference 55.8% | 45.0%-65.3% | Directional prompt gain; interval includes parity |
 
 In the base comparison, v16 won 28 prompts, the base won 4, 7 were ties where
 both were bad, and 1 was a tie where both were good. Among non-ties, v16 won
 87.5%. Median completion length fell from 54.5 tokens for the base to 11 for
-v16, consistent with adaptation to short conversational replies.
+v16. The adapted artifact is clearly preferred in this deployment-oriented
+comparison, but the design does not isolate model weights from template
+effects.
 
 The v15 comparison is an important negative result. v15 won 32 prompts and v16
 won 17, with 15 ties. v16 often expanded a conversational opening into an
@@ -55,17 +67,30 @@ but the measured evidence does not establish a conclusive win.
 
 The deployed v16 Q5 configuration was rated on all 43 post-prompt contexts.
 
+The review UI offered ordinal `good`, `acceptable`, and `bad` choices, but a
+separate formal rubric was not pre-registered. For interpretation:
+
+- `good` means the reviewer judged the response relevant, coherent, and
+  successful in the target chat style;
+- `acceptable` means it remained a valid contextual reply despite noticeable
+  style, specificity, or wording weaknesses;
+- `bad` means it was not a satisfactory reply because of irrelevance,
+  incoherence, wrong-thread selection, or a comparable failure.
+
+For compact reporting, `good + acceptable` is called `reviewer-usable`. It is
+an ordinal judgment by one reviewer, not a production acceptance rate.
+
 | Rating | Count | Rate |
 | --- | ---: | ---: |
 | Good | 22 | 51.2% |
 | Acceptable | 16 | 37.2% |
-| Usable: good or acceptable | 38 | 88.4% |
+| Reviewer-usable: good or acceptable | 38 | 88.4% |
 | Bad | 5 | 11.6% |
 
 The session-cluster 95% confidence interval is 39.5%-60.5% for good and
-78.1%-97.6% for usable. The Wilson interval for bad is 5.1%-24.5%.
+78.1%-97.6% for reviewer-usable. The Wilson interval for bad is 5.1%-24.5%.
 
-| Context category | Examples | Good | Usable |
+| Context category | Examples | Good | Reviewer-usable |
 | --- | ---: | ---: | ---: |
 | Normal chat | 15 | 66.7% | 93.3% |
 | Reply-heavy | 12 | 25.0% | 83.3% |
@@ -111,11 +136,13 @@ benchmark.
 
 ## Conclusions
 
-- Fine-tuning produced a clear adaptation gain over the unadapted base model.
+- The adapted v16 inference artifact was clearly preferred to the unadapted
+  base artifact in their intended no-thinking configurations.
 - v16 is not demonstrated to be better than v15 overall.
 - The production prompt is directionally preferred but does not resolve
   wrong-thread selection and unrelated continuations.
-- The deployed text configuration is usable on 88.4% of the audited contexts.
+- The deployed text configuration was judged good or acceptable on 88.4% of
+  the audited contexts by the primary reviewer.
 - The next training hypothesis is to improve last-relevant-turn selection and
   suppress unrelated continuation while preserving concise conversational
   behavior and v16's relative strength on multiple-topic contexts.

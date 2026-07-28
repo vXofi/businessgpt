@@ -30,6 +30,12 @@ The experiment matrix lives in `eval/experiments/v16_baseline.json`. All
 datasets, generations, ratings, reports, and runbooks belong below the ignored
 `eval_runs/` directory.
 
+Exact evaluation prompts are redacted from the public manifest. Local runs
+resolve them from the ignored `eval_runs/config/eval_prompts.json` object by
+default, from the path in `BUSINESSGPT_EVAL_PROMPTS_PATH`, or from the
+per-prompt environment variables named in the manifest. The resolver verifies
+the public SHA-256 before generation.
+
 Telegram Desktop HTML exports can be normalized before evaluation:
 
 ```bash

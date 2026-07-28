@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from eval.model_eval.analysis import (
     analyze_comparison,
@@ -16,6 +18,7 @@ from eval.model_eval.common import (
     profile_config,
     resolve_json_dataset_path,
     sha256_json,
+    sha256_text,
     write_json,
 )
 from eval.model_eval.dataset import (
@@ -841,6 +844,48 @@ class ModelEvalStatisticsTests(unittest.TestCase):
 
 
 class ModelEvalCommonTests(unittest.TestCase):
+    def test_redacted_prompt_resolves_from_private_file_and_checks_hash(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            prompt = "private system prompt"
+            prompt_path = root / "prompts.json"
+            write_json(prompt_path, {"private": prompt})
+            manifest = {
+                "prompts": {
+                    "private": {
+                        "description": "redacted",
+                        "env": "TEST_PRIVATE_PROMPT",
+                        "sha256": sha256_text(prompt),
+                    }
+                },
+                "sampling_profiles": {"s": {"temperature": 0.9}},
+                "profiles": {
+                    "p": {
+                        "prompt_id": "private",
+                        "sampling_id": "s",
+                    }
+                },
+            }
+
+            with patch.dict(
+                os.environ,
+                {"BUSINESSGPT_EVAL_PROMPTS_PATH": str(prompt_path)},
+                clear=False,
+            ):
+                self.assertEqual(
+                    profile_config(manifest, "p")["prompt_text"],
+                    prompt,
+                )
+
+            write_json(prompt_path, {"private": "wrong"})
+            with patch.dict(
+                os.environ,
+                {"BUSINESSGPT_EVAL_PROMPTS_PATH": str(prompt_path)},
+                clear=False,
+            ):
+                with self.assertRaisesRegex(ValueError, "hash mismatch"):
+                    profile_config(manifest, "p")
+
     def test_full_reasoning_is_removed_only_after_it_closes(self) -> None:
         response, reasoning = _extract_final_response(
             "analysis here</think>\n\nfinal answer<|im_end|>",

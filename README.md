@@ -14,12 +14,13 @@ deployment live in the sibling repo:
 
 - Current deployed baseline: v16 SFT, 9B Qwen3.5 abliterated line.
 - Serving artifact: GGUF, with Q5_K_M as the practical production quant.
-- The v16 text baseline is complete: fine-tuning clearly improves target-style
-  adaptation over the base model, while v15 remains directionally preferred
-  to v16 in a direct comparison.
-- The deployed text configuration was rated usable on 88.4% of the absolute
-  production audit. See `docs/EVALUATION_RESULTS.md` for the public-safe
-  methodology, confidence intervals, and limitations.
+- The v16 text baseline is complete: the adapted inference artifact is clearly
+  preferred to the unadapted base artifact in an artifact-level comparison,
+  while v15 remains directionally preferred to v16.
+- The deployed text configuration was judged good or acceptable on 88.4% of
+  the absolute audit by one primary reviewer. See
+  `docs/EVALUATION_RESULTS.md` for definitions, confidence intervals, and
+  limitations.
 - ORPO: attempted, parked, not shippable.
 - Reward model: trained; next useful quality experiment is offline best-of-N
   reranking before any server integration.
@@ -38,6 +39,8 @@ mental model.
 | `SCRIPT_GUIDE.md` | Commands for distillation, preference data, reward ranking, and export. |
 | `PLAN.md` | Retrospective history of older model versions. |
 | `docs/EVALUATION_RESULTS.md` | Public-safe v16 text evaluation results and limitations. |
+| `docs/RESPONSIBLE_USE.md` | Intended use, content risk, and privacy boundary. |
+| `docs/model_cards/` | Versioned source for the adapter and GGUF Hugging Face cards. |
 | `docs/FAILURE_TRACKING.md` | Private failure-log tags and record shape. |
 | `docs/TELEGRAM_EXPORTS.md` | Import Telegram Desktop HTML for private evaluation. |
 | `notebooks/training.ipynb` | SFT training notebook. |
@@ -113,6 +116,19 @@ Do not commit chat-derived artifacts:
 
 These files are gitignored because they contain private chat fragments or
 large model artifacts.
+
+## Responsible Use
+
+BusinessGPT is a research chatbot for a closed, allowlisted informal group-chat
+setting. Its persona intentionally permits profanity and can produce offensive,
+biased, or otherwise unsafe text. It is not a general-purpose assistant,
+factual authority, moderation system, or safety model, and its inference
+endpoint is not intended for unrestricted public access.
+
+The current public experiment manifest redacts exact operational prompts from
+the main project surface and retains neutral descriptions and content hashes
+for provenance. Prompt secrecy is not used as a security boundary. See
+`docs/RESPONSIBLE_USE.md`.
 
 ## Local Cleanup
 

@@ -12,9 +12,10 @@ As of July 2026, the active baseline is v16 SFT:
 - The production shape is a 9B Qwen3.5 abliterated LoRA merged/exported to GGUF,
   with Q5_K_M as the practical serving quant.
 - The v16 text baseline is frozen and documented in
-  `docs/EVALUATION_RESULTS.md`. Fine-tuning clearly adapts the base model, the
-  current production configuration is usable on 88.4% of the absolute audit,
-  and v15 remains directionally preferred to v16.
+  `docs/EVALUATION_RESULTS.md`. The adapted artifact is clearly preferred to
+  the unadapted base artifact, the current production configuration was judged
+  good or acceptable on 88.4% of the absolute audit by one reviewer, and v15
+  remains directionally preferred to v16.
 - The production system prompt is directionally preferred to the legacy prompt,
   but the measured interval includes parity. It is retained without claiming a
   conclusive win.

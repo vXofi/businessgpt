@@ -10,6 +10,27 @@ deployment live in the sibling repo:
 ../hugeballs-server
 ```
 
+## Project In One Minute
+
+- **Problem:** adapt a general 9B language model to produce short,
+  participant-style replies in Russian informal group chats under limited data
+  and CPU-serving constraints.
+- **Data and privacy:** training and evaluation use private chat-derived data.
+  Raw conversations and generations are not published; evaluation uses later,
+  session-aware holdouts and public aggregate reports.
+- **Experiment:** train a PEFT LoRA with completion-only loss, export it to
+  GGUF, and compare the base, v15, v16, and prompt variants through blinded
+  human review with source-session cluster bootstrap intervals.
+- **Result:** the adapted v16 artifact received 80.0% preference against the
+  unadapted base artifact. On a separate audit, one reviewer judged 88.4% of
+  deployed Q5 responses good or acceptable. v15 was directionally preferred
+  to v16, so v16 is not claimed as a universal upgrade.
+- **Limitations:** the base comparison is artifact-level, evaluation has one
+  primary reviewer, and vision, long multi-turn stability, concurrency, and
+  automated recovery remain unverified.
+- **Decision:** keep v16 as the frozen deployed reference, retain v15 as a
+  comparator, and evaluate a targeted v17 on a new session-disjoint holdout.
+
 ## Current State
 
 - Current deployed baseline: v16 SFT, 9B Qwen3.5 abliterated line.
@@ -26,6 +47,14 @@ deployment live in the sibling repo:
   reranking before any server integration.
 - Runtime repetition: currently considered mostly mitigated by structured chat
   formatting, but should be monitored with real dialogs.
+
+v16 remains the deployed baseline as a reference configuration, not as a claim
+that it is the best checkpoint. The v15 advantage is directional, its
+session-cluster interval includes parity, and it comes from one reviewer; v16
+also retains a relative advantage on multiple-topic contexts. A production
+rollback based on this evidence would exchange known behavior for an
+insufficiently validated alternative. The measured failures instead define the
+v17 hypothesis and independent promotion test.
 
 Use `ROADMAP.md` for the current backlog and `REPO_NOTES.md` for the compact
 mental model.

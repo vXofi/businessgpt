@@ -150,6 +150,20 @@ benchmark.
 Any v17 promotion decision must use a newer or separately reserved holdout.
 The exact baseline prompts must not become training examples.
 
+## Deployment Decision
+
+v16 remains the frozen deployed baseline, meaning the production reference
+against which the next candidate is evaluated. This is not a claim that v16 is
+the best checkpoint.
+
+The v15 preference is directional, its session-cluster interval includes
+parity, and the study used one primary reviewer. v16 also showed a relative
+advantage on multiple-topic contexts. Replacing the deployed artifact on this
+evidence alone would introduce a new production change without a conclusive
+aggregate result or a dedicated rollback validation. v15 is retained as a
+comparator, while the measured v16 failures define a targeted v17 experiment
+and an independent promotion holdout.
+
 ## Limitations And Deferred Work
 
 - One primary reviewer; inter-rater agreement was not measured.
